@@ -24,6 +24,7 @@ my %field_values = (
    'numCpu'  =>  'numCpu',
    'memorysize' => 'memorysize' ,
    'virtualdisks' => 'virtualdisks',
+   'cdromStatus' => 'cdromStatus',
    'template' => 'template',
    'vmPathName'=> 'vmPathName',
    'guestFullName'=> 'guestFullName',
@@ -234,6 +235,19 @@ sub get_vm_info {
                print_log("Not Known","virtualDisks","Virtual Disks");
             }
          }
+         elsif($_ eq 'cdromStatus') {
+             #print Dumper $vm_view->config->hardware->device{'VirtualCdrom'};
+             my $devices = $vm_view->config->hardware->device;
+             foreach my $device (@$devices) {
+                 next unless ($device->isa ('VirtualCdrom'));
+                 if ($device->connectable->connected == 1) {
+                     print_log("connected","CDROM Status","CDROM Status");
+                 }
+                 else {
+                     print_log("not connected","CDROM Status","CDROM Status");
+                 }
+             }
+         }
          elsif($_ eq 'template') {
             if (defined ($vm_view->summary->config->template)) {
                print_log($vm_view->summary->config->template,"template","Template");
@@ -287,12 +301,20 @@ sub get_vm_info {
             if (defined ($vm_view->summary->guest->toolsStatus)) {
                my $status = $vm_view->summary->guest->toolsStatus->val;
                print_log($toolsStatus{$status},"VMwareTools","VMware Tools");
+            } else {
+               print_log("Not Known","VMwareTools","VMware Tools");
             }
          }
          elsif($_ eq 'toolsVersion') {
             if (defined ($vm_view->config) && defined ($vm_view->config->tools) && defined ($vm_view->config->tools->toolsVersion)) {
                my $version = $vm_view->config->tools->toolsVersion;
-               print_log($toolsVersion{$version},"Tools Version","Tools Version");
+               if ($version ne '0') {
+                  print_log($toolsVersion{$version},"Tools Version","Tools Version");
+               } else {
+                  print_log("not installed","Tools Version","Tools Version");
+               }
+            } else {
+               print_log("Not Known","Tools Version","Tools Version");
             }
          }
          elsif($_ eq 'overallCpuUsage') {
@@ -394,9 +416,11 @@ sub validate {
    }
    else {
       @valid_properties = ("vmname",
+                           "version",
                            "numCpu",
                            "memorysize",
                            "virtualdisks",
+                           "cdromStatus",
                            "template",
                            "vmPathName",
                            "guestFullName",
@@ -404,6 +428,7 @@ sub validate {
                            "hostName",
                            "ipAddress",
                            "toolsStatus",
+                           "toolsVersion",
                            "overallCpuUsage",
                            "hostMemoryUsage",
                            "guestMemoryUsage",
