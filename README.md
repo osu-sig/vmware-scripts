@@ -6,6 +6,7 @@ A collection of scripts to automate and extract reporting information from vCent
 
 * VMware vSphere 5.1
 * VMware vSphere SDK for Perl
+* Text::CSV_XS
 
 ## Install
 
