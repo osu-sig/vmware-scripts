@@ -3,10 +3,6 @@
 use strict;
 use warnings;
 
-use Text::CSV_XS;
-use Devel::Size qw(total_size);
-use Time::HiRes qw(time);
-
 package SIG::AppUtil::VMUtil;
 use parent 'AppUtil::VMUtil';
 
