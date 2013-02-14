@@ -72,6 +72,13 @@ my %opts = (
     },
 );
 
+my %toolsStatus = (
+    'toolsNotInstalled' => 'not installed',
+    'toolsNotRunning' => 'not running',
+    'toolsOk' => 'up to date',
+    'toolsOld' => 'out of date',
+);
+
 Opts::add_options(%opts);
 Opts::parse();
 Opts::validate(\&validate);
@@ -112,8 +119,7 @@ sub validate {
 sub doIt {
     my %filter_hash = create_hash(Opts::get_option('ipaddress'),
         Opts::get_option('powerstatus'),
-        Opts::get_option('guestos'),
-        Opts::get_option('toolsmounted'));
+        Opts::get_option('guestos'));
 
     my ($start, $elapsed);
     $start = time();
@@ -124,7 +130,7 @@ sub doIt {
         Opts::get_option ('pool'),
         Opts::get_option ('host'),
         \%filter_hash,
-        ['name', 'guest']);
+        ['name', 'guest', 'config.version', 'config.extraConfig["vmware.tools.installstate"]', 'guest.toolsStatus', 'guest.toolsVersion']);
     $elapsed = time() - $start;
 
     printf("Total size of HostSystem (All Properties): %.2f KB in %.2fs\n", total_size($vm_views)/1024, $elapsed);
@@ -132,14 +138,50 @@ sub doIt {
     if ($vm_views) {
         foreach (@$vm_views) {
             my $vm_view = $_;
-            my ($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatus, $vm_toolsInstalling);
+            my ($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatus, $vm_toolsVersion, $vm_toolsInstallState);
+
+            # parse results
             $vm_name = $vm_view->get_property('name');
+            #print Dumper $vm_name;
             if (defined ($vm_view->get_property('guest.hostName'))) {
                 $vm_hostname = $vm_view->get_property('guest.hostName');
             } else {
                 $vm_hostname = "unknown";
             }
-            print_out($vm_name, $vm_hostname);
+            #print Dumper $vm_hostname;
+            if (defined ($vm_view->get_property('config.version'))) {
+                $vm_hwVersion = $vm_view->get_property('config.version');
+            } else {
+                $vm_hwVersion = "unknown";
+            }
+            #print Dumper $vm_hwVersion;
+            if (defined ($vm_view->get_property('guest.toolsStatus'))) {
+                my $vm_toolsStatusRaw = $vm_view->get_property('guest.toolsStatus');
+                $vm_toolsStatus = $vm_toolsStatusRaw->val;
+            } else {
+                $vm_toolsStatus = "unknown";
+            }
+            #print Dumper $vm_toolsStatus;
+            if (defined ($vm_view->get_property('guest.toolsVersion'))) {
+                $vm_toolsVersion = $vm_view->get_property('guest.toolsVersion');
+            } else {
+                $vm_toolsVersion = "unknown";
+            }
+            #print Dumper $vm_toolsVersion;
+            if (defined ($vm_view->get_property('config.extraConfig["vmware.tools.installstate"]'))) {
+                my $vm_toolsInstallStateRaw = $vm_view->get_property('config.extraConfig["vmware.tools.installstate"]');
+                $vm_toolsInstallState = $vm_toolsInstallStateRaw->value;
+            } else {
+                $vm_toolsInstallState = "unknown";
+            }
+            #print Dumper $vm_toolsInstallState;
+
+            # check for toolsmounted option, and skip if the vm is not currently installing vmware tools
+            if (defined (Opts::get_option('toolsmounted')) && $vm_toolsInstallState ne "initiated") {
+                next;
+            }
+            
+            print_out($vm_name, $vm_hostname, $vm_hwVersion, $toolsStatus{$vm_toolsStatus}, $vm_toolsInstallState);
         }
     }
 }
@@ -166,13 +208,12 @@ sub print_out($@) {
 }
 
 #
-# create hash for filtering by ip, guest os, power status, or VMware Tools
-# installation state
+# create hash for filtering by ip, guest os, or power status
 #
 # from VMware vminfo.pl
 #
 sub create_hash {
-    my ($ipaddress, $powerstatus, $guestos, $toolsmounted) = @_;
+    my ($ipaddress, $powerstatus, $guestos) = @_;
     my %filter_hash;
     if ($ipaddress) {
         $filter_hash{'guest.ipAddress'} = $ipaddress;
@@ -184,9 +225,6 @@ sub create_hash {
     if ($guestos) {
         # bug 456626
         $filter_hash{'config.guestFullName'} = qr/^\Q$guestos\E$/i;
-    }
-    if ($toolsmounted) {
-        $filter_hash{'config.extraConfig["vmware.tools.installstate"]'} = "true";
     }
     return %filter_hash;
 }
