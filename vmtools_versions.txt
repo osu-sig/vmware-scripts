@@ -1,0 +1,42 @@
+# VMware version-mapping file.
+#
+# This file provides a one-to-one mapping between VMware Tools for
+# ESX/ESXi version-number codes, and paths to OSP repositories suitable
+# for that Tools version.
+#
+9217        esx/5.1p01
+9216        esx/5.1
+8482        ../unsupported/tools/esx/mn_next
+8394        esx/5.0u2
+8389	    esx/5.0p04
+8389	    esx/5.0p03
+8389        esx/5.0u1
+8384        esx/5.0p02
+8384        esx/5.0
+8306        esx/4.1p07
+8305        esx/4.1p06
+8300        esx/4.1p05
+8300        esx/4.1u2
+8300        esx/4.1p04
+8295        esx/4.1p03
+8295        esx/4.1u1
+8300        esx/4.1u2
+8305        esx/4.1u3
+8290        esx/4.1
+8289        esx/4.1
+8288        esx/4.1
+8197        esx/4.0ep09
+8196        esx/4.0p12
+8196        esx/4.0p11
+8196        esx/4.0u4
+8196        esx/4.0p10
+8196        esx/4.0u3
+8195        esx/4.0u2
+8194        esx/4.0u1
+8193        esx/4.0
+8192        esx/4.0
+7304        esx/3.5p25
+7304        esx/3.5p24
+7304        esx/3.5u5
+7303        esx/3.5u4
+7302        esx/3.5u3
