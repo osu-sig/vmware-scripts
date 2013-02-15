@@ -168,7 +168,11 @@ sub doIt {
             } else {
                 $vm_toolsVersion = "unknown";
             }
-            $vm_toolsVersionPretty = $toolsVersions{$vm_toolsVersion};
+            if (defined ($toolsVersions{$vm_toolsVersion})) {
+                $vm_toolsVersionPretty = $toolsVersions{$vm_toolsVersion};
+            } else {
+                $vm_toolsVersionPretty = "";
+            }
             #print Dumper $vm_toolsVersion;
             if (defined ($vm_view->get_property('config.extraConfig["vmware.tools.installstate"]'))) {
                 my $vm_toolsInstallStateRaw = $vm_view->get_property('config.extraConfig["vmware.tools.installstate"]');
