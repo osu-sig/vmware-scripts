@@ -10,6 +10,8 @@ use Time::HiRes qw(time);
 use VMware::VIRuntime;
 use SIG;
 
+my $vmware_tool_versionfile = "vmtools_versions.txt";
+
 my %opts = (
     'vmname' => {
         type => "=s",
@@ -60,17 +62,16 @@ my %opts = (
         variable => "powerstatus",
         help     => "State of the virtual machine: poweredOn or poweredOff",
     },
-#   'fields' => {
-#      type => "=s",
-#      help => "To specify vm properties for display",
-#      required => 0,
-#   },
     'out'=>{
         type => "=s",
         help => "The file name for storing the script output",
         required => 0,
     },
 );
+
+Opts::add_options(%opts);
+Opts::parse();
+Opts::validate();
 
 my %toolsStatus = (
     'toolsNotInstalled' => 'not installed',
@@ -79,39 +80,35 @@ my %toolsStatus = (
     'toolsOld' => 'out of date',
 );
 
-Opts::add_options(%opts);
-Opts::parse();
-Opts::validate(\&validate);
+my %toolsVersions = get_tools_versions($vmware_tool_versionfile);
+
+# open output file if necessary
+my $out_fh;
+if (Opts::option_is_set('out')) {
+    my $filename = Opts::get_option('out');
+    if ((length($filename) == 0)) {
+        Util::trace(0, "\n'$filename' Not Valid:\n$@\n");
+        die "$filename not valid\n";
+    } else {
+        open($out_fh, '>', $filename);
+        if ((length($filename) == 0) || !(-e $filename && -r $filename && -T $filename)) {
+            Util::trace(0, "\n'$filename' Not Valid:\n$@\n");
+            die "$filename not valid\n";
+        } 
+    }
+}
+
+# prepare CSV output
+my $csv;
+if (Opts::option_is_set('out')) {
+    $csv = Text::CSV_XS->new ({ binary => 1, eol => "\015\012" }) or die "Cannot open CSV: " . Text::CSV_XS->error_diag();
+    $csv->print($out_fh, ['vmname','hostname','hardware version','vmware tools status','vmware tools version','vmware tools installation']);
+}
 
 Util::connect();
 doIt();
 Util::disconnect();
 
-#
-# validate commandline options
-#
-sub validate {
-    my $valid = 1;
-
-    # validate output filename
-    if (Opts::option_is_set('out')) {
-        my $filename = Opts::get_option('out');
-        if ((length($filename) == 0)) {
-            Util::trace(0, "\n'$filename' Not Valid:\n$@\n");
-            $valid = 0;
-        } else {
-            open(OUTFILE, ">$filename");
-            if ((length($filename) == 0) || !(-e $filename && -r $filename && -T $filename)) {
-                Util::trace(0, "\n'$filename' Not Valid:\n$@\n");
-                $valid = 0;
-            } else {
-                #TODO
-                #print OUTFILE "CSV COLUMN HEADERS GO HERE\n";
-            }
-        }
-    }
-    return $valid;
-}
 
 #
 # this is where the magic happens
@@ -138,7 +135,7 @@ sub doIt {
     if ($vm_views) {
         foreach (@$vm_views) {
             my $vm_view = $_;
-            my ($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatus, $vm_toolsVersion, $vm_toolsInstallState);
+            my ($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatus, $vm_toolsStatusPretty, $vm_toolsVersion, $vm_toolsVersionPretty, $vm_toolsInstallState);
 
             # parse results
             $vm_name = $vm_view->get_property('name');
@@ -161,12 +158,14 @@ sub doIt {
             } else {
                 $vm_toolsStatus = "unknown";
             }
+            $vm_toolsStatusPretty = $toolsStatus{$vm_toolsStatus};
             #print Dumper $vm_toolsStatus;
             if (defined ($vm_view->get_property('guest.toolsVersion'))) {
                 $vm_toolsVersion = $vm_view->get_property('guest.toolsVersion');
             } else {
                 $vm_toolsVersion = "unknown";
             }
+            $vm_toolsVersionPretty = $toolsVersions{$vm_toolsVersion};
             #print Dumper $vm_toolsVersion;
             if (defined ($vm_view->get_property('config.extraConfig["vmware.tools.installstate"]'))) {
                 my $vm_toolsInstallStateRaw = $vm_view->get_property('config.extraConfig["vmware.tools.installstate"]');
@@ -181,29 +180,26 @@ sub doIt {
                 next;
             }
             
-            print_out($vm_name, $vm_hostname, $vm_hwVersion, $toolsStatus{$vm_toolsStatus}, $vm_toolsInstallState);
+            if (defined (Opts::get_option('out'))) {
+                $csv->bind_columns(\($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatusPretty, $vm_toolsVersionPretty, $vm_toolsInstallState));
+                $csv->print($out_fh, undef);
+            } else {
+                print_out($vm_name, $vm_hostname, $vm_hwVersion, $vm_toolsStatusPretty, $vm_toolsVersionPretty, $vm_toolsInstallState);
+            }
         }
     }
 }
 
 #
-# print output to stdout or as csv
+# print output to stdout
 #
 # accepts a scalar or an array
 #
 sub print_out($@) {
     if (@_ > 1) {
-        if (defined (Opts::get_option('out'))) {
-            #TODO
-        } else {
-            Util::trace(0, join(",", @_) . "\n");
-        }
+        Util::trace(0, join(",", @_) . "\n");
     } else {
-        if (defined (Opts::get_option('out'))) {
-            #TODO
-        } else {
-            Util::trace(0, shift(@_) . "\n");
-        }
+        Util::trace(0, shift(@_) . "\n");
     }
 }
 
@@ -227,6 +223,27 @@ sub create_hash {
         $filter_hash{'config.guestFullName'} = qr/^\Q$guestos\E$/i;
     }
     return %filter_hash;
+}
+
+#
+# get VMware Tools versions from version file
+#
+sub get_tools_versions {
+    my $versionfile = shift;
+    my %version_hash;
+    
+    open(INPUTFILE, "<$versionfile") or die "error opening $versionfile: $!\n";
+    my(@lines) = <INPUTFILE>;
+    close(INPUTFILE);
+
+    my($line, $version_num, $version_name);
+    foreach $line (@lines) {
+        next if substr($line, 0, 1) eq "#";
+        ($version_num, $version_name) = split(/\s+/, $line);
+        $version_hash{$version_num} = $version_name;
+    }
+
+    return %version_hash;
 }
 
 # disable SSL hostname verification for vCenter self-signed certificate
