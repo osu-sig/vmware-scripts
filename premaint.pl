@@ -121,8 +121,8 @@ sub doIt {
         Opts::get_option('powerstatus'),
         Opts::get_option('guestos'));
 
-    my ($start, $elapsed);
-    $start = time();
+    #my ($start, $elapsed);
+    #$start = time();
     my $vm_views = SIG::AppUtil::VMUtil::get_vms_props('VirtualMachine',
         Opts::get_option ('vmname'),
         Opts::get_option ('datacenter'),
@@ -131,9 +131,9 @@ sub doIt {
         Opts::get_option ('host'),
         \%filter_hash,
         ['name', 'guest', 'config.version', 'config.extraConfig["vmware.tools.installstate"]', 'guest.toolsStatus', 'guest.toolsVersion']);
-    $elapsed = time() - $start;
+    #$elapsed = time() - $start;
 
-    printf("Total size of HostSystem (All Properties): %.2f KB in %.2fs\n", total_size($vm_views)/1024, $elapsed);
+    #printf("Total size of HostSystem (All Properties): %.2f KB in %.2fs\n", total_size($vm_views)/1024, $elapsed);
 
     if ($vm_views) {
         foreach (@$vm_views) {
