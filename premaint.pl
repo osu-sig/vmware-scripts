@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use FindBin;
-use lib "$FindBin::Bin/lib/";
+use lib "$FindBin::Bin/lib";
 
 use Text::CSV_XS;
 use Devel::Size qw(total_size);
