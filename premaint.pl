@@ -257,3 +257,102 @@ sub get_tools_versions {
 BEGIN {
     $ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
 }
+
+=head1 NAME
+
+premaint.pl - Report on useful information before vCenter maintenance
+
+=head1 SYNOPSIS
+
+ premaint.pl [options]
+
+=head1 DESCRIPTION
+
+This VI Perl command-line utility provides an interface for displaying
+the hardware version and VMware Tools ISO mount (installation) status of
+virtual machines. If no options are specified, the default report is
+displayed.
+
+=head1 OPTIONS
+
+=over
+
+=item B<vmname>
+
+Optional. The name of the virtual machine. It will be used to select the
+virtual machine.
+
+=item B<guestos>
+
+Name of the operating system running on the virtual machine. For example,
+if you specify Windows, all virtual machines running Windows are displayed. 
+
+=item B<ipaddress>
+
+Optional. ipaddress of the virtual machine.
+
+=item B<toolsmounted>
+
+Optional. Boolean. Limits results to only those virtual machines that currently
+have VMware Tools installation in progress.
+
+=item B<datacenter>
+
+Optional. Name of the  datacenter for the virtual machine(s). Parameters of the
+all the virtual machine(s) in a particular datacenter will be displayed
+
+=item B<pool>
+
+Optional. Name of the resource pool of the virtual machine(s). Parameters of 
+the all the virtual machine(s) in the given pool will be displayed.
+
+=item B<folder>
+
+Optional. Name of the folder which contains the virtual machines
+
+=item B<powerstatus>
+
+Optional. Powerstatus of the virtual machine: poweredOn or poweredOff. If 
+poweron is given, parameters of all the virtual machines which are powered on 
+will be displayed
+
+=item B<host>
+
+Optional. Hostname for selecting the virtual machines. Parameters of all
+the virtual machines in a particular host will be displayed.
+
+=item B<out>
+
+Optional. Filename in which output is to be displayed. If the file option
+is not given then output will be displayed on the console.
+
+=back
+
+=head1 EXAMPLES
+
+Displays a report for the VM named myVM to standard out.
+
+ premaint.pl --url https://<ipaddress>:<port>/sdk/webService
+             --username myuser --password mypassword --vmname myVM
+
+Displays a report for all VMs in the folder named "Foldername" to stdout.
+
+ premaint.pl --url https://<ipaddress>:<port>/sdk/webService
+             --username myuser --password mypassword --folder "Foldername" 
+
+Displays a report for all VMs that currently have a VMware Tools 
+installation in progress, and writes the report to a CSV file.
+
+ premaint.pl --url https://<ipaddress>:<port>/sdk/webService
+             --username myuser --password mypassword --toolsmounted
+             --out output.csv
+
+Sample Output
+
+ vpx-vd01,unknown,vmx-04,not running,esx/4.0,none
+ lb-vd01,lb-vd01,vmx-04,out of date,esx/4.0,none
+ centos 6.3x64 base,unknown,vmx-09,not running,,none
+ lb-vd03,lb-vd03,vmx-04,out of date,esx/4.0,none
+ pace-vd01,unknown,vmx-09,not installed,,none
+ pace-vd02,unknown,vmx-09,not running,esx/5.1p01,none
+ vmtoolstest,unknown,vmx-08,not installed,,initiated
