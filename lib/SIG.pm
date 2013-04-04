@@ -27,7 +27,6 @@ sub get_vms_props {
     my ($entity, $name, $datacenter, $folder, $pool, $host, $filter_ref, $props_ref) = @_;
     my $begin;
     my $entityViews;
-    my %filter = %$filter_ref;
 
     if (defined $datacenter) {
         # bug 299888
@@ -76,7 +75,7 @@ sub get_vms_props {
             Util::trace(0, "Host $host not found.");
             return;
         }
-        $filter{'name'} = $name if (defined $name);
+        $filter_ref->{'name'} = $name if (defined $name);
         my $vmviews = Vim::find_entity_views (view_type => $entity, begin_entity => $begin, filter => $filter_ref, properties => $props_ref);
         my @retViews;
         foreach (@$vmviews) {
@@ -93,7 +92,7 @@ sub get_vms_props {
             return;
         }
     } elsif (defined $name) {
-        $filter{'name'} = $name if (defined $name);
+        $filter_ref->{'name'} = $name if (defined $name);
         $entityViews = Vim::find_entity_views (view_type => $entity, begin_entity => $begin, filter => $filter_ref, properties => $props_ref);
         unless (@$entityViews) {
             Util::trace(0, "Virtual Machine $name not found.\n");
