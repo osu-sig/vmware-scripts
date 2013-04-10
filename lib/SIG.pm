@@ -52,10 +52,20 @@ sub get_vms_props {
             return;
         }
         if ($#{$vm_views} != 0) {
-            Util::trace(0, "Folder <$folder> not unique.\n");
-            return;
+            my @vm_folders;
+            foreach my $folder (@$vm_views) {
+                if (grep $_ eq 'VirtualMachine', @{$folder->childType}) {
+                    push @vm_folders, $folder;
+                }
+            }
+            if ($#vm_folders != 0) {
+                Util::trace(0, "Folder <$folder> not unique.\n");
+                return;
+            }
+            $begin = shift (@vm_folders);
+        } else {
+            $begin = shift (@$vm_views);
         }
-        $begin = shift (@$vm_views);
     }
     if (defined $pool) {
         my $vm_views = Vim::find_entity_views (view_type => 'ResourcePool', begin_entity => $begin, filter => {name => $pool});
