@@ -294,16 +294,16 @@ the virtual machines in a particular host will be displayed.
 Lists VMs with mounted CD-ROM devices in the "OSU Dev" datacenter and "SIG"
 folder to standard out.
 
- unmounter.pl --url https://<ipaddress>:<port>/sdk/webService
-              --username myuser --password mypassword --datacenter "OSU Dev"
-              --folder "SIG"
+ unmount.pl --url https://<ipaddress>:<port>/sdk/webService
+            --username myuser --password mypassword --datacenter "OSU Dev"
+            --folder "SIG"
 
 Disconnects and unmounts CD-ROM devices from VMs in the "OSU Dev" datacenter
 and "SIG" folder.
 
- unmounter.pl --url https://<ipaddress>:<port>/sdk/webService
-              --username myuser --password mypassword --datacenter "OSU Dev"
-              --folder "SIG" --unmount
+ unmount.pl --url https://<ipaddress>:<port>/sdk/webService
+            --username myuser --password mypassword --datacenter "OSU Dev"
+            --folder "SIG" --unmount
 
 Sample Output:
 
