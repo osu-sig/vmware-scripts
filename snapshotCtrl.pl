@@ -233,11 +233,11 @@ BEGIN {
 
 =head1 NAME
 
-snapshot-ctrl.pl - Reporting and management script for VM snapshots
+snapshotCtrl.pl - Reporting and management script for VM snapshots
 
 =head1 SYNOPSIS
 
- snapshot-ctrl.pl [options]
+ snapshotCtrl.pl [options]
 
 =head1 DESCRIPTION
 
@@ -304,19 +304,19 @@ is not specified the output will be sorted in ascending order.
 
 Displays a report for the VM named myVM to standard out.
 
- snapshot-ctrl.pl --url https://<ipaddress>:<port>/sdk/webService
+ snapshotCtrl.pl --url https://<ipaddress>:<port>/sdk/webService
              --username myuser --password mypassword --vmname myVM
 
 Displays a report for all VMs in the folder named "Foldername" to stdout.
 
- snapshot-ctrl.pl --url https://<ipaddress>:<port>/sdk/webService
+ snapshotCtrl.pl --url https://<ipaddress>:<port>/sdk/webService
              --username myuser --password mypassword --folder "Foldername" 
 
 Displays a report for all VMs in the "My Datacenter" datacenter, sorts
 by snapshot creation date in descending order, and writes the report 
 to a CSV file.
 
- snapshot-ctrl.pl --url https://<ipaddress>:<port>/sdk/webService
+ snapshotCtrl.pl --url https://<ipaddress>:<port>/sdk/webService
              --username myuser --password mypassword 
              --datacenter "My Datacenter" --out output.csv
 
