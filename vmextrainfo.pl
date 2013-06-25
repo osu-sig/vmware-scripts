@@ -456,17 +456,22 @@ sub validate {
   return $valid;   
 }   
 
+# disable SSL hostname verification for vCenter self-signed certificate
+BEGIN {
+    $ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
+}
+
 __END__
 
 ## bug 217605
 
 =head1 NAME
 
-vminfo.pl - List the properties of the virtual machines.
+vmextrainfo.pl - List the properties of the virtual machines.
 
 =head1 SYNOPSIS
 
- vminfo.pl [options]
+ vmextrainfo.pl [options]
 
 =head1 DESCRIPTION
 
@@ -519,8 +524,27 @@ the virtual machines in a particular host will be displayed.
 =item B<fields>
 
 Optional. Name of the fields whose value is to be displayed. The fields
-are name, numCpu, guestFullName, guestId, hostName, ipAddress, toolsStatus,
-memorysize, hostMemoryUsage, guestMemoryUsage, overallCpuUsage, vmPathName.
+are: 
+
+  vmname
+  version
+  numCpu
+  memorysize
+  virtualdisks
+  cdromStatus
+  template
+  vmPathName
+  guestFullName
+  guestId
+  hostName
+  ipAddress
+  toolsStatus
+  toolsVersion
+  overallCpuUsage
+  hostMemoryUsage
+  guestMemoryUsage
+  overallStatus
+
 If the fields option is not specified then all the properties will be
 displayed.
 
@@ -535,22 +559,22 @@ is not given then output will be displayed on the console.
 
 Displays all the attributes the virtual machine myVM:
 
- vminfo.pl --url https://<ipaddress>:<port>/sdk/webService
+ vmextrainfo.pl --url https://<ipaddress>:<port>/sdk/webService
            --username myuser --password mypassword --vmname myVM
 
 Displays all the attributes of all the virtual machines in folder myFolder:
 
- vminfo.pl --url https://<ipaddress>:<port>/sdk/webService
+ vmextrainfo.pl --url https://<ipaddress>:<port>/sdk/webService
            --username myuser --password mypassword --folder myFolder
 
 Displays specified attributes of all them virtual machines in pool myPool:
 
- vminfo.pl --url https://<ipaddress>:<port>/sdk/webService --username myuser --password mypassword --pool myPool
+ vmextrainfo.pl --url https://<ipaddress>:<port>/sdk/webService --username myuser --password mypassword --pool myPool
            --fields vmname,numCpu,guestFullName,hostName,ipAddress,toolsStatus,memorysize,hostMemoryUsage,guestMemoryUsage
 
 Send the output in a file
 
- vminfo.pl --url https://<ipaddress>:<port>/sdk/webService --username myuser
+ vmextrainfo.pl --url https://<ipaddress>:<port>/sdk/webService --username myuser
            --password mypassword  --host myHost --out output.xml
 
 Sample Output
