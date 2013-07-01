@@ -110,6 +110,7 @@ sub doIt {
             my $devices = $hardware->device;
             foreach my $device (@$devices) {
                 next unless ($device->isa ('VirtualCdrom'));
+
                 if ($device->connectable->connected == 1) {
                     #print_out($vm_name, $vm_hostname, $vm_toolsStatusPretty, $vm_toolsInstallState);
                     if (defined (Opts::get_option('unmount'))) {
@@ -133,10 +134,34 @@ sub doIt {
                             sleep 5;
                             check_questions();
                         }
-
-                        last;
                     } else {
                         print_out("$vm_name -> found connected cdrom device");
+                    }
+                }
+
+                if (exists $device->backing->{'fileName'}) {
+                    print_out("$vm_name -> found backing filename, removing...");
+                    my $cdrom_backing_info = VirtualCdromRemoteAtapiBackingInfo->new(deviceName => '');
+                    my $dev_con_info = VirtualDeviceConnectInfo->new(startConnected => 'false', connected => 'false', allowGuestControl => 'false');
+                    my $cdrom = VirtualCdrom->new(backing => $cdrom_backing_info, connectable => $dev_con_info, controllerKey => $device->controllerKey, key => $device->key, unitNumber => $device->unitNumber);
+
+                    my $spec = VirtualMachineConfigSpec->new(
+                        changeVersion => $vm_view->get_property('config.changeVersion'),
+                        deviceChange => [
+                            VirtualDeviceConfigSpec->new(
+                                operation => VirtualDeviceConfigSpecOperation->new("edit"),
+                                device => $cdrom
+                            )
+                        ]
+                    );
+
+                    my $vm_reconfig_task = $vm_view->ReconfigVM_Task(spec => $spec);
+                    my $vm_reconfig_tasks;
+                    push(@{$vm_reconfig_tasks}, $vm_reconfig_task);
+
+                    while(!reconfig_tasks_completed($vm_reconfig_tasks)) {
+                        sleep 5;
+                        #check_questions();
                     }
                 }
             }
@@ -156,7 +181,7 @@ sub reconfig_tasks_completed {
     foreach (@{$reconfig_task_views}) {
         my $reconfig_task_state = $_->info->state;
         print "\t" . $_->info->entityName . ": ReconfigVM Task Status - " .$reconfig_task_state->{'val'} . "\n";
-        if (($reconfig_task_state->{'val'} ne "error") &&($reconfig_task_state->{'val'} ne "success")) {
+        if (($reconfig_task_state->{'val'} ne "error") && ($reconfig_task_state->{'val'} ne "success")) {
             $completed = 0;
         }
     }
