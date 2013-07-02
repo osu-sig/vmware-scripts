@@ -111,17 +111,21 @@ sub doIt {
             foreach my $device (@$devices) {
                 next unless ($device->isa ('VirtualCdrom'));
 
-                if ($device->connectable->connected == 1) {
-                    #print_out($vm_name, $vm_hostname, $vm_toolsStatusPretty, $vm_toolsInstallState);
+                if (exists $device->backing->{'fileName'} && !exists $device->backing->{'datastore'}) {
                     if (defined (Opts::get_option('unmount'))) {
-                        print_out("$vm_name -> found connected cdrom device, unmounting...");
-                        $device->connectable->connected(0); # disconnect
+                        if (exists $device->backing->{'fileName'} || !exists $device->backing->{'datastore'}) {
+                            print_out("$vm_name -> found backing datastore ISO file, removing...");
+                        }
+
+                        my $cdrom_backing_info = VirtualCdromRemoteAtapiBackingInfo->new(deviceName => '');
+                        my $dev_con_info = VirtualDeviceConnectInfo->new(startConnected => 'false', connected => 'false', allowGuestControl => 'false');
+                        my $cdrom = VirtualCdrom->new(backing => $cdrom_backing_info, connectable => $dev_con_info, controllerKey => $device->controllerKey, key => $device->key, unitNumber => $device->unitNumber);
                         my $spec = VirtualMachineConfigSpec->new(
                             changeVersion => $vm_view->get_property('config.changeVersion'),
                             deviceChange => [
                                 VirtualDeviceConfigSpec->new(
                                     operation => VirtualDeviceConfigSpecOperation->new("edit"),
-                                    device => $device
+                                    device => $cdrom
                                 )
                             ]
                         );
@@ -135,33 +139,9 @@ sub doIt {
                             check_questions();
                         }
                     } else {
-                        print_out("$vm_name -> found connected cdrom device");
-                    }
-                }
-
-                if (exists $device->backing->{'fileName'}) {
-                    print_out("$vm_name -> found backing filename, removing...");
-                    my $cdrom_backing_info = VirtualCdromRemoteAtapiBackingInfo->new(deviceName => '');
-                    my $dev_con_info = VirtualDeviceConnectInfo->new(startConnected => 'false', connected => 'false', allowGuestControl => 'false');
-                    my $cdrom = VirtualCdrom->new(backing => $cdrom_backing_info, connectable => $dev_con_info, controllerKey => $device->controllerKey, key => $device->key, unitNumber => $device->unitNumber);
-
-                    my $spec = VirtualMachineConfigSpec->new(
-                        changeVersion => $vm_view->get_property('config.changeVersion'),
-                        deviceChange => [
-                            VirtualDeviceConfigSpec->new(
-                                operation => VirtualDeviceConfigSpecOperation->new("edit"),
-                                device => $cdrom
-                            )
-                        ]
-                    );
-
-                    my $vm_reconfig_task = $vm_view->ReconfigVM_Task(spec => $spec);
-                    my $vm_reconfig_tasks;
-                    push(@{$vm_reconfig_tasks}, $vm_reconfig_task);
-
-                    while(!reconfig_tasks_completed($vm_reconfig_tasks)) {
-                        sleep 5;
-                        #check_questions();
+                        if (exists $device->backing->{'fileName'} && !exists $device->backing->{'datastore'}) {
+                            print_out("$vm_name -> found backing datastore ISO file");
+                        }
                     }
                 }
             }
