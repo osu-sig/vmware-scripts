@@ -84,10 +84,7 @@ if (Opts::option_is_set('outfile')) {
 }
 
 my %stat_store;
-$stat_store{'vmCount'} = 0;
-$stat_store{'hostCount'} = 0;
-$stat_store{'datastoreCount'} = 0;
-$stat_store{'clusterCount'} = 0;
+my $vcenter_uuid;
 
 Util::connect();
 doIt();
@@ -117,10 +114,17 @@ sub getvCenterStats {
     my $vcBuild = $sc->about->build;
     my $instanceUuid = $sc->about->instanceUuid;
 
+    my %vc_store;
 
-    $stat_store{'vcVersion'} = $vcVersion;
-    $stat_store{'vcBuild'} = $vcBuild;
-    $stat_store{'instanceUuid'} = $instanceUuid;
+    $vc_store{'vcVersion'} = $vcVersion;
+    $vc_store{'vcBuild'} = $vcBuild;
+    $vc_store{'vmCount'} = 0;
+    $vc_store{'hostCount'} = 0;
+    $vc_store{'datastoreCount'} = 0;
+    $vc_store{'clusterCount'} = 0;
+    $stat_store{$instanceUuid} = \%vc_store;
+
+    $vcenter_uuid = $instanceUuid;
 }
 
 sub getVMStats {
@@ -168,8 +172,8 @@ sub getVMStats {
             $vm_store{'vmFaultToleranceState'} = $vm_view->{'summary.runtime.faultToleranceState'}->val;
             $vm_store{'vmHWVersion'} = $vm_view->{'config.version'};
 
-            $stat_store{'vmStats'}{$vm_store{'vmUuid'}} = \%vm_store;
-            $stat_store{'vmCount'}++;
+            $stat_store{$vcenter_uuid}{'vmStats'}{$vm_store{'vmUuid'}} = \%vm_store;
+            $stat_store{$vcenter_uuid}{'vmCount'}++;
         }
     }
 }
@@ -227,12 +231,12 @@ sub getHostStats {
                 }
             }
 
-            $stat_store{'hostStats'}{$host_store{'hostUuid'}} = \%host_store;
-            $stat_store{'hostCount'}++;
+            $stat_store{$vcenter_uuid}{'hostStats'}{$host_store{'hostUuid'}} = \%host_store;
+            $stat_store{$vcenter_uuid}{'hostCount'}++;
         }
 
-        $stat_store{'lunCount'} = scalar(keys %lun_store);
-        $stat_store{'lunStats'} = \%lun_store
+        $stat_store{$vcenter_uuid}{'lunCount'} = scalar(keys %lun_store);
+        $stat_store{$vcenter_uuid}{'lunStats'} = \%lun_store
     }
 }
 
@@ -254,7 +258,7 @@ sub getDatastoreStats {
             my %ds_store;
 
             $ds_store{'datastoreName'} = $ds_view->{'info'}->name;
-            $ds_store{'datastoreUuid'} = $stat_store{'instanceUuid'} . "-" . $ds_view->{'mo_ref'}->value;
+            $ds_store{'datastoreUuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
             $ds_store{'datastoreType'} = $ds_view->{'summary'}->type;
             $ds_store{'datastoreSSD'} = "false";
             $ds_store{'datastoreVMFSVersion'} = "N/A";
@@ -266,8 +270,8 @@ sub getDatastoreStats {
             $ds_store{'datastoreFree'} = $ds_view->{'summary'}->freeSpace;
             $ds_store{'datastoreVMs'} = scalar(@{Vim::get_views(mo_ref_array => $ds_view->vm, properties => ['name'])});
 
-            $stat_store{'datastoreStats'}{$ds_store{'datastoreUuid'}} = \%ds_store;
-            $stat_store{'datastoreCount'}++;
+            $stat_store{$vcenter_uuid}{'datastoreStats'}{$ds_store{'datastoreUuid'}} = \%ds_store;
+            $stat_store{$vcenter_uuid}{'datastoreCount'}++;
         }
     }
 }
@@ -290,7 +294,7 @@ sub getClusterStats {
             my %cluster_store;
 
             $cluster_store{'clusterName'} = $cluster_view->{'name'};
-            $cluster_store{'clusterUuid'} = $stat_store{'instanceUuid'} . "-" . $cluster_view->{'mo_ref'}->value;
+            $cluster_store{'clusterUuid'} = $vcenter_uuid . "-" . $cluster_view->{'mo_ref'}->value;
             $cluster_store{'clusterTotalCpu'} = $cluster_view->{'summary'}->totalCpu;
             $cluster_store{'clusterTotalMem'} = $cluster_view->{'summary'}->totalMemory;
             $cluster_store{'clusterAvailableCPU'} = $cluster_view->{'summary'}->effectiveCpu;
@@ -307,8 +311,8 @@ sub getClusterStats {
             $cluster_store{'clusterDatastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $cluster_view->{'datastore'}, properties => ['name'])});
             $cluster_store{'clusterVMCount'} = scalar(@{Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $cluster_view, properties => ['name'])});
 
-            $stat_store{'clusterStats'}{$cluster_store{'clusterUuid'}} = \%cluster_store;
-            $stat_store{'clusterCount'}++;
+            $stat_store{$vcenter_uuid}{'clusterStats'}{$cluster_store{'clusterUuid'}} = \%cluster_store;
+            $stat_store{$vcenter_uuid}{'clusterCount'}++;
         }
     }
 }
