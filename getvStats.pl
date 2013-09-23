@@ -7,6 +7,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib";
 
 use JSON;
+use POSIX;
 use Devel::Size qw(total_size);
 use Time::HiRes qw(time);
 
@@ -116,8 +117,8 @@ sub getvCenterStats {
 
     my %vc_store;
 
-    $vc_store{'vcVersion'} = $vcVersion;
-    $vc_store{'vcBuild'} = $vcBuild;
+    $vc_store{'version'} = $vcVersion;
+    $vc_store{'build'} = $vcBuild;
     $vc_store{'vmCount'} = 0;
     $vc_store{'hostCount'} = 0;
     $vc_store{'datastoreCount'} = 0;
@@ -153,26 +154,26 @@ sub getVMStats {
             my %vm_store;
 
             # parse results
-            $vm_store{'vmUuid'} = $vm_view->{'summary.config'}->instanceUuid;
-            $vm_store{'vmName'} = $vm_view->{'name'};
-            $vm_store{'vmHostname'} = (defined $vm_view->{'guest.hostName'} ? $vm_view->{'guest.hostName'} : "unknown");
-            $vm_store{'vmState'} = $vm_view->{'summary.runtime.powerState'}->val;
-            $vm_store{'vmGuestOS'} = $vm_view->{'summary.config'}->guestFullName;
-            $vm_store{'vmCPUCount'} = $vm_view->{'summary.config'}->numCpu;
-            $vm_store{'vmCPUUsage'} = $vm_view->{'summary.quickStats'}->overallCpuUsage;
-            $vm_store{'vmCPUReservation'} = $vm_view->{'summary.config'}->cpuReservation;
-            $vm_store{'vmMemSize'} = $vm_view->{'summary.config'}->memorySizeMB;
-            $vm_store{'vmMemUsage'} = $vm_view->{'summary.quickStats'}->guestMemoryUsage;
-            $vm_store{'vmMemReservation'} = $vm_view->{'summary.config'}->memoryReservation;
-            $vm_store{'vmNicCount'} = $vm_view->{'summary.config'}->numEthernetCards;
-            $vm_store{'vmDiskCount'} = $vm_view->{'summary.config'}->numVirtualDisks;
-            $vm_store{'vmStorageTotal'} = $vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted;
-            $vm_store{'vmStorageUsed'} = $vm_view->{'summary.storage'}->committed;
-            $vm_store{'vmUptime'} = ($vm_view->{'summary.quickStats'}->uptimeSeconds ? $vm_view->{'summary.quickStats'}->uptimeSeconds : "N/A");
-            $vm_store{'vmFaultToleranceState'} = $vm_view->{'summary.runtime.faultToleranceState'}->val;
-            $vm_store{'vmHWVersion'} = $vm_view->{'config.version'};
+            $vm_store{'uuid'} = $vm_view->{'summary.config'}->instanceUuid;
+            $vm_store{'name'} = $vm_view->{'name'};
+            $vm_store{'hostname'} = (defined $vm_view->{'guest.hostName'} ? $vm_view->{'guest.hostName'} : "unknown");
+            $vm_store{'powerState'} = $vm_view->{'summary.runtime.powerState'}->val;
+            $vm_store{'guestOS'} = $vm_view->{'summary.config'}->guestFullName;
+            $vm_store{'cpuCount'} = $vm_view->{'summary.config'}->numCpu + 0;
+            $vm_store{'cpuUsage'} = $vm_view->{'summary.quickStats'}->overallCpuUsage + 0;
+            $vm_store{'cpuReservation'} = $vm_view->{'summary.config'}->cpuReservation + 0;
+            $vm_store{'memSize'} = $vm_view->{'summary.config'}->memorySizeMB + 0;
+            $vm_store{'memUsage'} = $vm_view->{'summary.quickStats'}->guestMemoryUsage + 0;
+            $vm_store{'memReservation'} = $vm_view->{'summary.config'}->memoryReservation + 0;
+            $vm_store{'nicCount'} = $vm_view->{'summary.config'}->numEthernetCards + 0;
+            $vm_store{'diskCount'} = $vm_view->{'summary.config'}->numVirtualDisks + 0;
+            $vm_store{'storageSize'} = ($vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted) / 1024^2;
+            $vm_store{'storageUsage'} = $vm_view->{'summary.storage'}->committed / 1024^2;
+            $vm_store{'uptime'} = ($vm_view->{'summary.quickStats'}->uptimeSeconds ? floor($vm_view->{'summary.quickStats'}->uptimeSeconds / 60) : "N/A");
+            $vm_store{'faultToleranceState'} = $vm_view->{'summary.runtime.faultToleranceState'}->val;
+            $vm_store{'hardwareVersion'} = $vm_view->{'config.version'};
 
-            $stat_store{$vcenter_uuid}{'vmStats'}{$vm_store{'vmUuid'}} = \%vm_store;
+            $stat_store{$vcenter_uuid}{'vmStats'}{$vm_store{'uuid'}} = \%vm_store;
             $stat_store{$vcenter_uuid}{'vmCount'}++;
         }
     }
@@ -197,27 +198,27 @@ sub getHostStats {
 
             my %host_store;
 
-            $host_store{'hostName'} = $host_view->{'name'};
-            $host_store{'hostUuid'} = $host_view->{'summary.hardware'}->uuid;
-            $host_store{'hostState'} = $host_view->{'summary.runtime'}->powerState->val;
-            $host_store{'hostVersion'} = $host_view->{'config.product'}->version;
-            $host_store{'hostBuild'} = $host_view->{'config.product'}->build;
-            $host_store{'hostVendor'} = $host_view->{'summary.hardware'}->vendor;
-            $host_store{'hostModel'} = $host_view->{'summary.hardware'}->model;
-            $host_store{'hostCPUVendor'} = $host_view->{'summary.hardware'}->cpuModel;
-            $host_store{'hostCPUSocket'} = $host_view->{'summary.hardware'}->numCpuPkgs;
-            $host_store{'hostCPUCores'} = $host_view->{'summary.hardware'}->numCpuCores;
-            $host_store{'hostCPUSpeed'} = $host_view->{'summary.hardware'}->cpuMhz;
-            $host_store{'hostCPUUsage'} = $host_view->{'summary.quickStats'}->overallCpuUsage;
-            $host_store{'hostCPUThread'} = $host_view->{'summary.hardware'}->numCpuThreads;
-            $host_store{'hostMemSize'} = $host_view->{'summary.hardware'}->memorySize;
-            $host_store{'hostMemUsage'} = $host_view->{'summary.quickStats'}->overallMemoryUsage;
-            $host_store{'hostHBACount'} = $host_view->{'summary.hardware'}->numHBAs;
-            $host_store{'hostNicCount'} = $host_view->{'summary.hardware'}->numNics;
-            $host_store{'hostUptime'} = $host_view->{'summary.quickStats'}->uptime;
+            $host_store{'name'} = $host_view->{'name'};
+            $host_store{'uuid'} = $host_view->{'summary.hardware'}->uuid;
+            $host_store{'powerState'} = $host_view->{'summary.runtime'}->powerState->val;
+            $host_store{'version'} = $host_view->{'config.product'}->version;
+            $host_store{'build'} = $host_view->{'config.product'}->build;
+            $host_store{'vendor'} = $host_view->{'summary.hardware'}->vendor;
+            $host_store{'model'} = $host_view->{'summary.hardware'}->model;
+            $host_store{'cpuVendor'} = $host_view->{'summary.hardware'}->cpuModel;
+            $host_store{'cpuSocket'} = $host_view->{'summary.hardware'}->numCpuPkgs + 0;
+            $host_store{'cpuCores'} = $host_view->{'summary.hardware'}->numCpuCores + 0;
+            $host_store{'cpuSpeed'} = $host_view->{'summary.hardware'}->cpuMhz + 0;
+            $host_store{'cpuUsage'} = $host_view->{'summary.quickStats'}->overallCpuUsage + 0;
+            $host_store{'cpuThread'} = $host_view->{'summary.hardware'}->numCpuThreads + 0;
+            $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024^2;
+            $host_store{'memUsage'} = $host_view->{'summary.quickStats'}->overallMemoryUsage + 0;
+            $host_store{'hbaCount'} = $host_view->{'summary.hardware'}->numHBAs + 0;
+            $host_store{'nicCount'} = $host_view->{'summary.hardware'}->numNics + 0;
+            $host_store{'uptime'} = floor($host_view->{'summary.quickStats'}->uptime / 60);
 
-            $host_store{'hostDatastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'datastore'}, properties => ['name'])});
-            $host_store{'hostVMCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'vm'}, properties => ['name'])});
+            $host_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'datastore'}, properties => ['name'])});
+            $host_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'vm'}, properties => ['name'])});
 
             my $host_storage_system = Vim::get_view(mo_ref => $host_view->{'configManager.storageSystem'});
             my $luns = $host_storage_system->storageDeviceInfo->scsiLun;
@@ -231,7 +232,7 @@ sub getHostStats {
                 }
             }
 
-            $stat_store{$vcenter_uuid}{'hostStats'}{$host_store{'hostUuid'}} = \%host_store;
+            $stat_store{$vcenter_uuid}{'hostStats'}{$host_store{'uuid'}} = \%host_store;
             $stat_store{$vcenter_uuid}{'hostCount'}++;
         }
 
@@ -257,20 +258,20 @@ sub getDatastoreStats {
 
             my %ds_store;
 
-            $ds_store{'datastoreName'} = $ds_view->{'info'}->name;
-            $ds_store{'datastoreUuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
-            $ds_store{'datastoreType'} = $ds_view->{'summary'}->type;
-            $ds_store{'datastoreSSD'} = "false";
-            $ds_store{'datastoreVMFSVersion'} = "N/A";
-            if ($ds_store{'datastoreType'} eq "VMFS") {
-                $ds_store{'datastoreSSD'} = ($ds_view->{'info'}->vmfs->ssd ? "true" : "false");
-                $ds_store{'datastoreVMFSVersion'} = $ds_view->{'info'}->vmfs->version;
+            $ds_store{'name'} = $ds_view->{'info'}->name;
+            $ds_store{'uuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
+            $ds_store{'type'} = $ds_view->{'summary'}->type;
+            $ds_store{'isSSD'} = "false";
+            $ds_store{'vmfsVersion'} = "N/A";
+            if ($ds_store{'type'} eq "VMFS") {
+                $ds_store{'isSSD'} = ($ds_view->{'info'}->vmfs->ssd ? "true" : "false");
+                $ds_store{'vmfsVersion'} = $ds_view->{'info'}->vmfs->version;
             }
-            $ds_store{'datastoreCapacity'} = $ds_view->{'summary'}->capacity;
-            $ds_store{'datastoreFree'} = $ds_view->{'summary'}->freeSpace;
-            $ds_store{'datastoreVMs'} = scalar(@{Vim::get_views(mo_ref_array => $ds_view->vm, properties => ['name'])});
+            $ds_store{'storageSize'} = $ds_view->{'summary'}->capacity / 1024^2;
+            $ds_store{'storageAvailable'} = $ds_view->{'summary'}->freeSpace / 1024^2;
+            $ds_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $ds_view->vm, properties => ['name'])});
 
-            $stat_store{$vcenter_uuid}{'datastoreStats'}{$ds_store{'datastoreUuid'}} = \%ds_store;
+            $stat_store{$vcenter_uuid}{'datastoreStats'}{$ds_store{'uuid'}} = \%ds_store;
             $stat_store{$vcenter_uuid}{'datastoreCount'}++;
         }
     }
@@ -293,25 +294,25 @@ sub getClusterStats {
 
             my %cluster_store;
 
-            $cluster_store{'clusterName'} = $cluster_view->{'name'};
-            $cluster_store{'clusterUuid'} = $vcenter_uuid . "-" . $cluster_view->{'mo_ref'}->value;
-            $cluster_store{'clusterTotalCpu'} = $cluster_view->{'summary'}->totalCpu;
-            $cluster_store{'clusterTotalMem'} = $cluster_view->{'summary'}->totalMemory;
-            $cluster_store{'clusterAvailableCPU'} = $cluster_view->{'summary'}->effectiveCpu;
-            $cluster_store{'clusterAvailableMemory'} = $cluster_view->{'summary'}->effectiveMemory;
+            $cluster_store{'name'} = $cluster_view->{'name'};
+            $cluster_store{'uuid'} = $vcenter_uuid . "-" . $cluster_view->{'mo_ref'}->value;
+            $cluster_store{'cpuTotal'} = $cluster_view->{'summary'}->totalCpu + 0;
+            $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024^2;
+            $cluster_store{'cpuAvailable'} = $cluster_view->{'summary'}->effectiveCpu + 0;
+            $cluster_store{'memAvailable'} = $cluster_view->{'summary'}->effectiveMemory + 0;
 
-            $cluster_store{'clusterHA'} = "N/A";
-            $cluster_store{'clusterDRS'} = "N/A";
+            $cluster_store{'isHA'} = "N/A";
+            $cluster_store{'isDRS'} = "N/A";
 
             if ($cluster_view->{'configurationEx'}->isa('ClusterConfigInfoEx')) {
-                $cluster_store{'clusterHA'} = ($cluster_view->{'configurationEx'}->dasConfig->enabled ? "true" : "false");
-                $cluster_store{'clusterDRS'} = ($cluster_view->{'configurationEx'}->drsConfig->enabled ? "true" : "false");
+                $cluster_store{'isHA'} = ($cluster_view->{'configurationEx'}->dasConfig->enabled ? "true" : "false");
+                $cluster_store{'isDRS'} = ($cluster_view->{'configurationEx'}->drsConfig->enabled ? "true" : "false");
             }
-            $cluster_store{'clusterHostCount'} = $cluster_view->{'summary'}->numHosts;
-            $cluster_store{'clusterDatastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $cluster_view->{'datastore'}, properties => ['name'])});
-            $cluster_store{'clusterVMCount'} = scalar(@{Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $cluster_view, properties => ['name'])});
+            $cluster_store{'hostCount'} = $cluster_view->{'summary'}->numHosts + 0;
+            $cluster_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $cluster_view->{'datastore'}, properties => ['name'])});
+            $cluster_store{'vmCount'} = scalar(@{Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $cluster_view, properties => ['name'])});
 
-            $stat_store{$vcenter_uuid}{'clusterStats'}{$cluster_store{'clusterUuid'}} = \%cluster_store;
+            $stat_store{$vcenter_uuid}{'clusterStats'}{$cluster_store{'uuid'}} = \%cluster_store;
             $stat_store{$vcenter_uuid}{'clusterCount'}++;
         }
     }
