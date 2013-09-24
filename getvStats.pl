@@ -7,12 +7,16 @@ use FindBin;
 use lib "$FindBin::Bin/lib";
 
 use JSON;
-use POSIX;
+use POSIX qw(floor strftime);
+use Time::Local qw(timelocal);
 use Devel::Size qw(total_size);
 use Time::HiRes qw(time);
 
 use VMware::VIRuntime;
 use SIG;
+
+my $logfile = "$FindBin::Bin/logs/getvStats.log";
+open my $log_fh, ">", $logfile;
 
 my %opts = (
     'vmname' => {
@@ -102,10 +106,16 @@ sub doIt {
     my $encoded = encode_json(\%stat_store);
 
     if (Opts::option_is_set('outfile')) {
+        print "Writing to outfile...\n";
         print OUTFILE $encoded;
     } else {
         print $encoded;
     }
+
+    close OUTFILE;
+    close $log_fh;
+
+    print "Finished.\n";
 }
 
 sub getvCenterStats {
@@ -153,25 +163,126 @@ sub getVMStats {
             my $vm_view = $_;
             my %vm_store;
 
-            # parse results
-            $vm_store{'uuid'} = $vm_view->{'summary.config'}->instanceUuid;
-            $vm_store{'name'} = $vm_view->{'name'};
-            $vm_store{'hostname'} = (defined $vm_view->{'guest.hostName'} ? $vm_view->{'guest.hostName'} : "unknown");
-            $vm_store{'powerState'} = $vm_view->{'summary.runtime.powerState'}->val;
-            $vm_store{'guestOS'} = $vm_view->{'summary.config'}->guestFullName;
-            $vm_store{'cpuCount'} = $vm_view->{'summary.config'}->numCpu + 0;
-            $vm_store{'cpuUsage'} = $vm_view->{'summary.quickStats'}->overallCpuUsage + 0;
-            $vm_store{'cpuReservation'} = $vm_view->{'summary.config'}->cpuReservation + 0;
-            $vm_store{'memSize'} = $vm_view->{'summary.config'}->memorySizeMB + 0;
-            $vm_store{'memUsage'} = $vm_view->{'summary.quickStats'}->guestMemoryUsage + 0;
-            $vm_store{'memReservation'} = $vm_view->{'summary.config'}->memoryReservation + 0;
-            $vm_store{'nicCount'} = $vm_view->{'summary.config'}->numEthernetCards + 0;
-            $vm_store{'diskCount'} = $vm_view->{'summary.config'}->numVirtualDisks + 0;
-            $vm_store{'storageSize'} = ($vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted) / 1024^2;
-            $vm_store{'storageUsage'} = $vm_view->{'summary.storage'}->committed / 1024^2;
-            $vm_store{'uptime'} = ($vm_view->{'summary.quickStats'}->uptimeSeconds ? floor($vm_view->{'summary.quickStats'}->uptimeSeconds / 60) : "N/A");
-            $vm_store{'faultToleranceState'} = $vm_view->{'summary.runtime.faultToleranceState'}->val;
-            $vm_store{'hardwareVersion'} = $vm_view->{'config.version'};
+            if (defined $vm_view->{'summary.config'}->instanceUuid) {
+                $vm_store{'uuid'} = $vm_view->{'summary.config'}->instanceUuid;
+            } else {
+                $vm_store{'uuid'} = '';
+                print_log($log_fh, "missing vm uuid");
+            }
+
+            if (defined $vm_view->{'name'}) {
+                $vm_store{'name'} = $vm_view->{'name'};
+            } else {
+                $vm_store{'name'} = '';
+                print_log($log_fh, $vm_store{'uuid'}, "missing vm name");
+            }
+
+            if (defined $vm_view->{'guest.hostName'}) {
+                $vm_store{'hostname'} = $vm_view->{'guest.hostName'};
+            } else {
+                $vm_store{'hostname'} = '';
+                # do not print to log because hostname is not a required property
+            }
+
+            if (defined $vm_view->{'summary.runtime.powerState'}->val) {
+                $vm_store{'powerState'} = $vm_view->{'summary.runtime.powerState'}->val;
+            } else {
+                $vm_store{'powerState'} = '';
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm power state");
+            }
+
+            if (defined $vm_view->{'summary.config'}->guestFullName) {
+                $vm_store{'guestOS'} = $vm_view->{'summary.config'}->guestFullName;
+            } else {
+                $vm_store{'guestOS'} = '';
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm guest OS");
+            }
+
+            if (defined $vm_view->{'summary.config'}->numCpu) {
+                $vm_store{'cpuCount'} = $vm_view->{'summary.config'}->numCpu + 0;
+            } else {
+                $vm_store{'cpuCount'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm cpu count");
+            }
+
+            if (defined $vm_view->{'summary.quickStats'}->overallCpuUsage) {
+                $vm_store{'cpuUsage'} = $vm_view->{'summary.quickStats'}->overallCpuUsage + 0;
+            } else {
+                $vm_store{'cpuUsage'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm cpu usage");
+            }
+
+            if (defined $vm_view->{'summary.config'}->cpuReservation) {
+                $vm_store{'cpuReservation'} = $vm_view->{'summary.config'}->cpuReservation + 0;
+            } else {
+                $vm_store{'cpuReservation'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm cpu reservation");
+            }
+
+            if (defined $vm_view->{'summary.config'}->memorySizeMB) {
+                $vm_store{'memSize'} = $vm_view->{'summary.config'}->memorySizeMB + 0;
+            } else {
+                $vm_store{'memSize'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm mem size");
+            }
+
+            if (defined $vm_view->{'summary.quickStats'}->guestMemoryUsage) {
+                $vm_store{'memUsage'} = $vm_view->{'summary.quickStats'}->guestMemoryUsage + 0;
+            } else {
+                $vm_store{'memUsage'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm mem usage");
+            }
+
+            if (defined $vm_view->{'summary.config'}->memoryReservation) {
+                $vm_store{'memReservation'} = $vm_view->{'summary.config'}->memoryReservation + 0;
+            } else {
+                $vm_store{'memReservation'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm mem reservation");
+            }
+
+            if (defined $vm_view->{'summary.config'}->numEthernetCards) {
+                $vm_store{'nicCount'} = $vm_view->{'summary.config'}->numEthernetCards + 0;
+            } else {
+                $vm_store{'nicCount'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm nic count");
+            }
+
+            if (defined $vm_view->{'summary.config'}->numVirtualDisks) {
+                $vm_store{'diskCount'} = $vm_view->{'summary.config'}->numVirtualDisks + 0;
+            } else {
+                $vm_store{'diskCount'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm disk count");
+            }
+
+            if (defined $vm_view->{'summary.storage'}) {
+                $vm_store{'storageSize'} = ($vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted) / 1024^2;
+                $vm_store{'storageUsage'} = $vm_view->{'summary.storage'}->committed / 1024^2;
+            } else {
+                $vm_store{'storageSize'} = 0;
+                $vm_store{'storageUsage'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm storage values");
+            }
+
+            if (defined $vm_view->{'summary.quickStats'}->uptimeSeconds) {
+                $vm_store{'uptime'} = ($vm_view->{'summary.quickStats'}->uptimeSeconds ? floor($vm_view->{'summary.quickStats'}->uptimeSeconds / 60) : "N/A");
+            } else {
+                $vm_store{'uptime'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm uptime");
+            }
+
+            if (defined $vm_view->{'summary.runtime.faultToleranceState'}->val) {
+                $vm_store{'faultToleranceState'} = $vm_view->{'summary.runtime.faultToleranceState'}->val;
+            } else {
+                $vm_store{'faultToleranceState'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm fault tolerance state");
+            }
+
+            if (defined $vm_view->{'config.version'}) {
+                $vm_store{'hardwareVersion'} = $vm_view->{'config.version'};
+            } else {
+                $vm_store{'hardwareVersion'} = 0;
+                print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm hardware version");
+            }
 
             $stat_store{$vcenter_uuid}{'vmStats'}{$vm_store{'uuid'}} = \%vm_store;
             $stat_store{$vcenter_uuid}{'vmCount'}++;
@@ -198,24 +309,131 @@ sub getHostStats {
 
             my %host_store;
 
-            $host_store{'name'} = $host_view->{'name'};
-            $host_store{'uuid'} = $host_view->{'summary.hardware'}->uuid;
-            $host_store{'powerState'} = $host_view->{'summary.runtime'}->powerState->val;
-            $host_store{'version'} = $host_view->{'config.product'}->version;
-            $host_store{'build'} = $host_view->{'config.product'}->build;
-            $host_store{'vendor'} = $host_view->{'summary.hardware'}->vendor;
-            $host_store{'model'} = $host_view->{'summary.hardware'}->model;
-            $host_store{'cpuVendor'} = $host_view->{'summary.hardware'}->cpuModel;
-            $host_store{'cpuSocket'} = $host_view->{'summary.hardware'}->numCpuPkgs + 0;
-            $host_store{'cpuCores'} = $host_view->{'summary.hardware'}->numCpuCores + 0;
-            $host_store{'cpuSpeed'} = $host_view->{'summary.hardware'}->cpuMhz + 0;
-            $host_store{'cpuUsage'} = $host_view->{'summary.quickStats'}->overallCpuUsage + 0;
-            $host_store{'cpuThread'} = $host_view->{'summary.hardware'}->numCpuThreads + 0;
-            $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024^2;
-            $host_store{'memUsage'} = $host_view->{'summary.quickStats'}->overallMemoryUsage + 0;
-            $host_store{'hbaCount'} = $host_view->{'summary.hardware'}->numHBAs + 0;
-            $host_store{'nicCount'} = $host_view->{'summary.hardware'}->numNics + 0;
-            $host_store{'uptime'} = floor($host_view->{'summary.quickStats'}->uptime / 60);
+            if (defined $host_view->{'summary.hardware'}->uuid) {
+                $host_store{'uuid'} = $host_view->{'summary.hardware'}->uuid;
+            } else {
+                $host_store{'uuid'} = '';
+                print_log($log_fh, "missing host uuid");
+            }
+
+            if (defined $host_view->{'name'}) {
+                $host_store{'name'} = $host_view->{'name'};
+            } else {
+                $host_store{'name'} = '';
+                print_log($log_fh, $host_store{'uuid'}, "missing host name");
+            }
+
+            if (defined $host_view->{'summary.runtime'}->powerState->val) {
+                $host_store{'powerState'} = $host_view->{'summary.runtime'}->powerState->val;
+            } else {
+                $host_store{'powerState'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host power state");
+            }
+
+            if (defined $host_view->{'config.product'}->version) {
+                $host_store{'version'} = $host_view->{'config.product'}->version;
+            } else {
+                $host_store{'version'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host version");
+            }
+
+            if (defined $host_view->{'config.product'}->build) {
+                $host_store{'build'} = $host_view->{'config.product'}->build;
+            } else {
+                $host_store{'build'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host build");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->vendor) {
+                $host_store{'vendor'} = $host_view->{'summary.hardware'}->vendor;
+            } else {
+                $host_store{'vendor'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host vendor");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->model) {
+                $host_store{'model'} = $host_view->{'summary.hardware'}->model;
+            } else {
+                $host_store{'model'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host model");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->cpuModel) {
+                $host_store{'cpuVendor'} = $host_view->{'summary.hardware'}->cpuModel;
+            } else {
+                $host_store{'cpuVendor'} = '';
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu vendor");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->numCpuPkgs) {
+                $host_store{'cpuSocket'} = $host_view->{'summary.hardware'}->numCpuPkgs + 0;
+            } else {
+                $host_store{'cpuSocket'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu socket count");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->numCpuCores) {
+                $host_store{'cpuCores'} = $host_view->{'summary.hardware'}->numCpuCores + 0;
+            } else {
+                $host_store{'cpuCores'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu cores");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->cpuMhz) {
+                $host_store{'cpuSpeed'} = $host_view->{'summary.hardware'}->cpuMhz + 0;
+            } else {
+                $host_store{'cpuSpeed'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu speed");
+            }
+
+            if (defined $host_view->{'summary.quickStats'}->overallCpuUsage) {
+                $host_store{'cpuUsage'} = $host_view->{'summary.quickStats'}->overallCpuUsage + 0;
+            } else {
+                $host_store{'cpuUsage'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu usage");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->numCpuThreads) {
+                $host_store{'cpuThread'} = $host_view->{'summary.hardware'}->numCpuThreads + 0;
+            } else {
+                $host_store{'cpuThread'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu thread count");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->memorySize) {
+                $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024^2;
+            } else {
+                $host_store{'memSize'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host mem size");
+            }
+
+            if (defined $host_view->{'summary.quickStats'}->overallMemoryUsage) {
+                $host_store{'memUsage'} = $host_view->{'summary.quickStats'}->overallMemoryUsage + 0;
+            } else {
+                $host_store{'memUsage'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host mem usage");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->numHBAs) {
+                $host_store{'hbaCount'} = $host_view->{'summary.hardware'}->numHBAs + 0;
+            } else {
+                $host_store{'hbaCount'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host hba count");
+            }
+
+            if (defined $host_view->{'summary.hardware'}->numNics) {
+                $host_store{'nicCount'} = $host_view->{'summary.hardware'}->numNics + 0;
+            } else {
+                $host_store{'nicCount'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host nic count");
+            }
+
+            if (defined $host_view->{'summary.quickStats'}->uptime) {
+                $host_store{'uptime'} = floor($host_view->{'summary.quickStats'}->uptime / 60);
+            } else {
+                $host_store{'uptime'} = 0;
+                print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host uptime");
+            }
 
             $host_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'datastore'}, properties => ['name'])});
             $host_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'vm'}, properties => ['name'])});
@@ -258,17 +476,49 @@ sub getDatastoreStats {
 
             my %ds_store;
 
-            $ds_store{'name'} = $ds_view->{'info'}->name;
-            $ds_store{'uuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
-            $ds_store{'type'} = $ds_view->{'summary'}->type;
+            if (defined $ds_view->{'mo_ref'}->value) {
+                $ds_store{'uuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
+            } else {
+                $ds_store{'uuid'} = '';
+                print_log($log_fh, "missing datastore uuid");
+            }
+
+            if (defined $ds_view->{'info'}->name) {
+                $ds_store{'name'} = $ds_view->{'info'}->name;
+            } else {
+                $ds_store{'name'} = '';
+                print_log($log_fh, $ds_store{'uuid'}, "missing datastore name");
+            }
+
             $ds_store{'isSSD'} = "false";
             $ds_store{'vmfsVersion'} = "N/A";
-            if ($ds_store{'type'} eq "VMFS") {
-                $ds_store{'isSSD'} = ($ds_view->{'info'}->vmfs->ssd ? "true" : "false");
-                $ds_store{'vmfsVersion'} = $ds_view->{'info'}->vmfs->version;
+
+            if (defined $ds_view->{'summary'}->type) {
+                $ds_store{'type'} = $ds_view->{'summary'}->type;
+
+                if ($ds_store{'type'} eq "VMFS") {
+                    $ds_store{'isSSD'} = ($ds_view->{'info'}->vmfs->ssd ? "true" : "false");
+                    $ds_store{'vmfsVersion'} = $ds_view->{'info'}->vmfs->version;
+                }
+            } else {
+                $ds_store{'type'} = '';
+                print_log($log_fh, $ds_store{'uuid'}, $ds_store{'name'}, "missing datastore type");
             }
-            $ds_store{'storageSize'} = $ds_view->{'summary'}->capacity / 1024^2;
-            $ds_store{'storageAvailable'} = $ds_view->{'summary'}->freeSpace / 1024^2;
+
+            if (defined $ds_view->{'summary'}->capacity) {
+                $ds_store{'storageSize'} = $ds_view->{'summary'}->capacity / 1024^2;
+            } else {
+                $ds_store{'storageSize'} = 0;
+                print_log($log_fh, $ds_store{'uuid'}, $ds_store{'name'}, "missing datastore size");
+            }
+
+            if (defined $ds_view->{'summary'}->freeSpace) {
+                $ds_store{'storageAvailable'} = $ds_view->{'summary'}->freeSpace / 1024^2;
+            } else {
+                $ds_store{'storageAvailable'} = 0;
+                print_log($log_fh, $ds_store{'uuid'}, $ds_store{'name'}, "missing datastore available space");
+            }
+
             $ds_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $ds_view->vm, properties => ['name'])});
 
             $stat_store{$vcenter_uuid}{'datastoreStats'}{$ds_store{'uuid'}} = \%ds_store;
@@ -294,12 +544,47 @@ sub getClusterStats {
 
             my %cluster_store;
 
-            $cluster_store{'name'} = $cluster_view->{'name'};
-            $cluster_store{'uuid'} = $vcenter_uuid . "-" . $cluster_view->{'mo_ref'}->value;
-            $cluster_store{'cpuTotal'} = $cluster_view->{'summary'}->totalCpu + 0;
-            $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024^2;
-            $cluster_store{'cpuAvailable'} = $cluster_view->{'summary'}->effectiveCpu + 0;
-            $cluster_store{'memAvailable'} = $cluster_view->{'summary'}->effectiveMemory + 0;
+            if (defined $cluster_view->{'mo_ref'}->value) {
+                $cluster_store{'uuid'} = $vcenter_uuid . "-" . $cluster_view->{'mo_ref'}->value;
+            } else {
+                $cluster_store{'uuid'} = '';
+                print_log($log_fh, "missing cluster uuid");
+            }
+
+            if (defined $cluster_view->{'name'}) {
+                $cluster_store{'name'} = $cluster_view->{'name'};
+            } else {
+                $cluster_store{'name'} = '';
+                print_log($log_fh, $cluster_store{'uuid'}, "missing cluster name");
+            }
+
+            if (defined $cluster_view->{'summary'}->totalCpu) {
+                $cluster_store{'cpuTotal'} = $cluster_view->{'summary'}->totalCpu + 0;
+            } else {
+                $cluster_store{'cpuTotal'} = 0;
+                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster cpu total");
+            }
+
+            if (defined $cluster_view->{'summary'}->totalMemory) {
+                $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024^2;
+            } else {
+                $cluster_store{'memSize'} = 0;
+                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem size");
+            }
+
+            if (defined $cluster_view->{'summary'}->effectiveCpu) {
+                $cluster_store{'cpuAvailable'} = $cluster_view->{'summary'}->effectiveCpu + 0;
+            } else {
+                $cluster_store{'cpuAvailable'} = 0;
+                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster cpu available");
+            }
+
+            if (defined $cluster_view->{'summary'}->effectiveMemory) {
+                $cluster_store{'memAvailable'} = $cluster_view->{'summary'}->effectiveMemory + 0;
+            } else {
+                $cluster_store{'memAvailable'} = 0;
+                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem available");
+            }
 
             $cluster_store{'isHA'} = "N/A";
             $cluster_store{'isDRS'} = "N/A";
@@ -308,7 +593,14 @@ sub getClusterStats {
                 $cluster_store{'isHA'} = ($cluster_view->{'configurationEx'}->dasConfig->enabled ? "true" : "false");
                 $cluster_store{'isDRS'} = ($cluster_view->{'configurationEx'}->drsConfig->enabled ? "true" : "false");
             }
-            $cluster_store{'hostCount'} = $cluster_view->{'summary'}->numHosts + 0;
+
+            if (defined $cluster_view->{'summary'}->numHosts) {
+                $cluster_store{'hostCount'} = $cluster_view->{'summary'}->numHosts + 0;
+            } else {
+                $cluster_store{'hostCount'} = 0;
+                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster host count");
+            }
+
             $cluster_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $cluster_view->{'datastore'}, properties => ['name'])});
             $cluster_store{'vmCount'} = scalar(@{Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $cluster_view, properties => ['name'])});
 
@@ -328,6 +620,22 @@ sub print_out($@) {
         Util::trace(0, join(",", @_) . "\n");
     } else {
         Util::trace(0, shift(@_) . "\n");
+    }
+}
+
+#
+# print to logfile
+#
+sub print_log {
+    my $fh = shift;
+
+    my @time = localtime;
+    my $t = strftime "%Y-%m-%d %T", @time;
+
+    if (@_ > 1) {
+        return say {$fh} "[$t]" . join(" ", @_);
+    } else {
+        return say {$fh} "[$t] " . shift(@_);
     }
 }
 
