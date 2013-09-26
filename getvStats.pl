@@ -255,8 +255,8 @@ sub getVMStats {
             }
 
             if (defined $vm_view->{'summary.storage'}) {
-                $vm_store{'storageSize'} = ($vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted) / 1024^2;
-                $vm_store{'storageUsage'} = $vm_view->{'summary.storage'}->committed / 1024^2;
+                $vm_store{'storageSize'} = ($vm_view->{'summary.storage'}->committed + $vm_view->{'summary.storage'}->uncommitted) / 1024**2;
+                $vm_store{'storageUsage'} = $vm_view->{'summary.storage'}->committed / 1024**2;
             } else {
                 $vm_store{'storageSize'} = 0;
                 $vm_store{'storageUsage'} = 0;
@@ -401,7 +401,7 @@ sub getHostStats {
             }
 
             if (defined $host_view->{'summary.hardware'}->memorySize) {
-                $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024^2;
+                $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024**2;
             } else {
                 $host_store{'memSize'} = 0;
                 print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host mem size");
@@ -506,14 +506,14 @@ sub getDatastoreStats {
             }
 
             if (defined $ds_view->{'summary'}->capacity) {
-                $ds_store{'storageSize'} = $ds_view->{'summary'}->capacity / 1024^2;
+                $ds_store{'storageSize'} = $ds_view->{'summary'}->capacity / 1024**2;
             } else {
                 $ds_store{'storageSize'} = 0;
                 print_log($log_fh, $ds_store{'uuid'}, $ds_store{'name'}, "missing datastore size");
             }
 
             if (defined $ds_view->{'summary'}->freeSpace) {
-                $ds_store{'storageAvailable'} = $ds_view->{'summary'}->freeSpace / 1024^2;
+                $ds_store{'storageAvailable'} = $ds_view->{'summary'}->freeSpace / 1024**2;
             } else {
                 $ds_store{'storageAvailable'} = 0;
                 print_log($log_fh, $ds_store{'uuid'}, $ds_store{'name'}, "missing datastore available space");
@@ -566,7 +566,7 @@ sub getClusterStats {
             }
 
             if (defined $cluster_view->{'summary'}->totalMemory) {
-                $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024^2;
+                $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024**2;
             } else {
                 $cluster_store{'memSize'} = 0;
                 print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem size");
