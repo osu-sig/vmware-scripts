@@ -242,16 +242,6 @@ sub getVMStats {
 
             if (defined $vm_view->{'summary.config'}->numEthernetCards) {
                 $vm_store{'nicCount'} = $vm_view->{'summary.config'}->numEthernetCards + 0;
-                my %nic_store;
-                my $devices = $vm_view->{'config.hardware.device'};
-                foreach my $device (@$devices) {
-                    next unless ($device->isa('VirtualEthernetCard'));
-                    my $mac_addr = $device->macAddress;
-                    $nic_store{$mac_addr}{'label'} = $device->deviceInfo->label;
-                    $nic_store{$mac_addr}{'network'} = $device->deviceInfo->summary;
-                    $nic_store{$mac_addr}{'isConnected'} = $device->connectable->connected;
-                }
-                $vm_store{'nics'} = \%nic_store;
             } else {
                 $vm_store{'nicCount'} = 0;
                 print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm nic count");
@@ -294,7 +284,7 @@ sub getVMStats {
                 print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm hardware version");
             }
 
-            $stat_store{$vcenter_uuid}{'vmStats'}{$vm_store{'uuid'}} = \%vm_store;
+            $stat_store{$vcenter_uuid}{'vms'}{$vm_store{'uuid'}} = \%vm_store;
             $stat_store{$vcenter_uuid}{'vmCount'}++;
         }
     }
@@ -445,8 +435,27 @@ sub getHostStats {
                 print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host uptime");
             }
 
-            $host_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'datastore'}, properties => ['name'])});
-            $host_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $host_view->{'vm'}, properties => ['name'])});
+            my @host_datastores;
+            my $ds_views = Vim::get_views(mo_ref_array => $host_view->{'datastore'}, properties => ['name']);
+            foreach my $ds_view (@$ds_views) {
+                my %ds_store;
+                $ds_store{'uuid'} = $vcenter_uuid . "-" . $ds_view->{'mo_ref'}->value;
+                $ds_store{'name'} = $ds_view->{'name'};
+                push(@host_datastores, \%ds_store);
+            }
+            $host_store{'datastores'} = \@host_datastores;
+            $host_store{'datastoreCount'} = scalar(@host_datastores);
+
+            my @host_vms;
+            my $vm_views = Vim::get_views(mo_ref_array => $host_view->{'vm'}, properties => ['name','summary.config.instanceUuid']);
+            foreach my $vm_view (@$vm_views) {
+                my %vm_store;
+                $vm_store{'uuid'} = $vm_view->{'summary.config.instanceUuid'};
+                $vm_store{'name'} = $vm_view->{'name'};
+                push(@host_vms, \%vm_store);
+            }
+            $host_store{'vms'} = \@host_vms;
+            $host_store{'vmCount'} = scalar(@host_vms);
 
             my $host_storage_system = Vim::get_view(mo_ref => $host_view->{'configManager.storageSystem'});
             my $luns = $host_storage_system->storageDeviceInfo->scsiLun;
@@ -460,12 +469,12 @@ sub getHostStats {
                 }
             }
 
-            $stat_store{$vcenter_uuid}{'hostStats'}{$host_store{'uuid'}} = \%host_store;
+            $stat_store{$vcenter_uuid}{'hosts'}{$host_store{'uuid'}} = \%host_store;
             $stat_store{$vcenter_uuid}{'hostCount'}++;
         }
 
         $stat_store{$vcenter_uuid}{'lunCount'} = scalar(keys %lun_store);
-        $stat_store{$vcenter_uuid}{'lunStats'} = \%lun_store
+        $stat_store{$vcenter_uuid}{'luns'} = \%lun_store
     }
 }
 
@@ -531,7 +540,7 @@ sub getDatastoreStats {
 
             $ds_store{'vmCount'} = scalar(@{Vim::get_views(mo_ref_array => $ds_view->vm, properties => ['name'])});
 
-            $stat_store{$vcenter_uuid}{'datastoreStats'}{$ds_store{'uuid'}} = \%ds_store;
+            $stat_store{$vcenter_uuid}{'datastores'}{$ds_store{'uuid'}} = \%ds_store;
             $stat_store{$vcenter_uuid}{'datastoreCount'}++;
         }
     }
@@ -543,7 +552,7 @@ sub getClusterStats {
     my ($start, $elapsed);
     $start = time();
 
-    my $cluster_views = Vim::find_entity_views(view_type => 'ClusterComputeResource', properties => ['name','summary','datastore','resourcePool','configurationEx']);
+    my $cluster_views = Vim::find_entity_views(view_type => 'ClusterComputeResource', properties => ['name','host','summary','datastore','resourcePool','configurationEx']);
 
     $elapsed = time() - $start;
     printf("Total size of cluster properties: %.2f KB in %.2fs\n", total_size($cluster_views)/1024, $elapsed);
@@ -604,6 +613,21 @@ sub getClusterStats {
                 $cluster_store{'isDRS'} = ($cluster_view->{'configurationEx'}->drsConfig->enabled ? "true" : "false");
             }
 
+            my @cluster_hosts;
+            my $host_views = Vim::get_views(mo_ref_array => $cluster_view->{'host'}, properties => ['name','summary.hardware.uuid','summary.runtime.connectionState']);
+            if ($host_views) {
+                foreach (@$host_views) {
+                    my $host_view = $_;
+                    if ($host_view->{'summary.runtime.connectionState'}->val eq 'connected') {
+                        my %host;
+                        $host{'uuid'} = $host_view->{'summary.hardware.uuid'};
+                        $host{'name'} = $host_view->{'name'};
+                        push(@cluster_hosts, \%host);
+                    }
+                }
+            }
+            $cluster_store{'hosts'} = \@cluster_hosts;
+
             if (defined $cluster_view->{'summary'}->numHosts) {
                 $cluster_store{'hostCount'} = $cluster_view->{'summary'}->numHosts + 0;
             } else {
@@ -614,7 +638,7 @@ sub getClusterStats {
             $cluster_store{'datastoreCount'} = scalar(@{Vim::get_views(mo_ref_array => $cluster_view->{'datastore'}, properties => ['name'])});
             $cluster_store{'vmCount'} = scalar(@{Vim::find_entity_views(view_type => 'VirtualMachine', begin_entity => $cluster_view, properties => ['name'])});
 
-            $stat_store{$vcenter_uuid}{'clusterStats'}{$cluster_store{'uuid'}} = \%cluster_store;
+            $stat_store{$vcenter_uuid}{'clusters'}{$cluster_store{'uuid'}} = \%cluster_store;
             $stat_store{$vcenter_uuid}{'clusterCount'}++;
         }
     }
