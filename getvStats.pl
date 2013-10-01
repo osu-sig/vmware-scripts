@@ -242,6 +242,16 @@ sub getVMStats {
 
             if (defined $vm_view->{'summary.config'}->numEthernetCards) {
                 $vm_store{'nicCount'} = $vm_view->{'summary.config'}->numEthernetCards + 0;
+                my %nic_store;
+                my $devices = $vm_view->{'config.hardware.device'};
+                foreach my $device (@$devices) {
+                    next unless ($device->isa('VirtualEthernetCard'));
+                    my $mac_addr = $device->macAddress;
+                    $nic_store{$mac_addr}{'label'} = $device->deviceInfo->label;
+                    $nic_store{$mac_addr}{'network'} = $device->deviceInfo->summary;
+                    $nic_store{$mac_addr}{'isConnected'} = $device->connectable->connected;
+                }
+                $vm_store{'nics'} = \%nic_store;
             } else {
                 $vm_store{'nicCount'} = 0;
                 print_log($log_fh, $vm_store{'uuid'}, $vm_store{'name'}, "missing vm nic count");
