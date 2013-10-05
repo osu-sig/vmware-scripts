@@ -6,8 +6,9 @@ use warnings;
 use FindBin;
 use lib "$FindBin::Bin/lib";
 
-use Date::Format;
-use Date::Parse;
+use DateTime;
+use DateTime::Format::Strptime;
+use DateTime::Format::ISO8601;
 use Devel::Size qw(total_size);
 use Time::HiRes qw(time);
 use Data::Dumper;
@@ -39,15 +40,6 @@ my %opts = (
 Opts::add_options(%opts);
 Opts::parse();
 Opts::validate();
-
-# open log file if necessary
-my $log_fh;
-my $filename = 'logs/nukesnaps.log';
-open($log_fh, '>', $filename);
-if ((length($filename) == 0) || !(-e $filename && -r $filename && -T $filename)) {
-    Util::trace(0, "\n'$filename' Not Valid:\n$@\n");
-    die "$filename not valid\n";
-} 
 
 Util::connect();
 do_it();
@@ -89,6 +81,11 @@ sub delete_snapshots {
 
     print_out("Deleting snapshots for $datacenter...");
 
+    my $cutoff_period = 24;
+    if (defined(Opts::get_option('period'))) {
+        $cutoff_period = Opts::get_option('period');
+    }
+
     my ($start, $elapsed);
     $start = time();
     my $vm_views = SIG::AppUtil::VMUtil::get_vms_props('VirtualMachine',
@@ -122,13 +119,41 @@ sub delete_snapshots {
             }
         }
     }
-    #print Dumper @snapshots;
-    foreach (@snapshots) {
-        my $snap = $_;
-        my $snapvm = @$snap[0];
-        my $snapname = @$snap[1];
-        my $snaptime = @$snap[2];
-        printf("\t%s %s %s\n", $snapvm, $snapname, $snaptime);
+
+    foreach my $snap (@snapshots) {
+        my ($snap_vm, $snap_name, $snap_date, $snap_moref) = @$snap;
+
+        # convert snapshot date from UTC to local timezone
+        my $dtsnap = DateTime::Format::ISO8601->parse_datetime($snap_date);
+        $dtsnap->set_time_zone("America/Los_Angeles");
+        $snap_date = $dtsnap->strftime("%Y-%m-%d %H:%M:%S %Z");
+        #print_out($snap_vm, $snap_name, $snap_date);
+
+        # skip this snapshot if it is newer than the cutoff date
+        my $dtnow = DateTime->now(time_zone=>'local');
+        my $dtcutoff = $dtnow->clone->subtract(hours => $cutoff_period);
+        #my $dtcutoff = $dtnow->clone->subtract(minutes => 5);
+        next if $dtsnap > $dtcutoff;
+
+        # do nothing if noop flag is set
+        print "\t$snap_vm snapshot $snap_name is older than $cutoff_period hours, deleting...\n";
+        #print "\t$snap_vm snapshot '$snap_name' is older than 5 minutes, deleting...\n";
+        next if defined(Opts::get_option('noop'));
+
+        my $snap_view = Vim::get_view(mo_ref => $snap_moref);
+        my $remove_snap_task = $snap_view->RemoveSnapshot_Task(removeChildren => 'false', consolidate => 'true');
+        my $running = 1;
+        while ($running) {
+            my $remove_snap_task_view = Vim::get_view(mo_ref => $remove_snap_task);
+            my $remove_snap_task_state = $remove_snap_task_view->info->state;
+            print "\t" . $remove_snap_task_view->info->entityName . "->" . $snap_moref->value . ": RemoveSnapshot_Task Status - " . $remove_snap_task_state->{'val'} . "\n";
+            if (($remove_snap_task_state->{'val'} ne "error") && ($remove_snap_task_state->{'val'} ne "success")) {
+                $running = 1; # task state is queued or running
+            } else {
+                $running = 0;
+            }
+            sleep 5;
+        }
     }
 }
 
@@ -141,7 +166,7 @@ sub get_snapshots {
     foreach my $node (@$snaptree) {
         $head = ($ref->value eq $node->snapshot->value) ? " " : " " if (defined $ref);
         #print_out($vmname, $node->name, $node->createTime);
-        push(@$snapshots_ref,[$vmname, $node->name, $node->createTime]);
+        push(@$snapshots_ref,[$vmname, $node->name, $node->createTime, $node->snapshot]);
         get_snapshots($ref, $node->childSnapshotList, $vmname, $snapshots_ref);
     }
 }
