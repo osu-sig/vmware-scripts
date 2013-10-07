@@ -1,0 +1,3 @@
+findBorkedVMs:
+    email_to: some@email.com
+    email_from: another@email.com

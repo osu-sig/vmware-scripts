@@ -1,0 +1,5 @@
+[% FILTER format('%-15s') %][% 'Datacenter' %][% END %] [% FILTER format('%-25s') %][% 'VM' %][% END %][% FILTER format('%-40s') %][% 'Hostname' %][% END %]
+--------------------------------------------------------------------------------
+[% FOREACH vm IN borked -%]
+[% FILTER format('%-15s') %][% vm.0 %][% END %] [% FILTER format('%-25s') %][% vm.1 %][% END %][% FILTER format('%-40s') %][% vm.2 %][% END %]
+[% END -%]
