@@ -186,7 +186,28 @@ findBorkedVMs.pl - Find VMs affected by KB article 1007487
 
 =head1 DESCRIPTION
 
-TODO
+This VI Perl command-line utility identifies VMs in which the experimental
+edit hardware feature was used to change the disk size before a VM was deployed
+from a template. See KB article 1007487 for details.
+
+The resulting report is sent via email by default. In dry run mode, the report
+is printed to stdout.
+
+=head1 CONFIGURATION
+
+Configuration is stored in B<config.yml> under the B<findBorkedVMs> heading.
+
+=over
+
+=item B<email_to>
+
+Email address(es) to send report to. Multiple addresses can be specified in a comma separated list.
+
+=item B<email_from>
+
+Email address that should appear in the "From" field of the report.
+
+=back
 
 =head1 OPTIONS
 
@@ -194,13 +215,22 @@ TODO
 
 =item B<exclude>
 
-Optional. TODO
+Optional. Datacenter(s) to exclude. Multiple datacenters can be specified in a quoted, comma-separated list. See examples for usage.
 
 =item B<noop>
 
-Optional. TODO
+Optional. Dry run, take no action.
 
 =back
 
 =head1 EXAMPLES
 
+Find all affected VMs on this vCenter.
+
+  ./findBorkedVMs.pl --url https://vcenter.url.com --username username
+                     --password password
+
+Find all affected VMs on this vCenter, excluding the "Dev" and "Dev 2" datacenters.
+
+  ./findBorkedVMs.pl --url https://vcenter.url.com --username username
+                     --password password --exclude "Dev,Dev 2"
