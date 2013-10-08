@@ -34,7 +34,7 @@ Opts::add_options(%opts);
 Opts::parse();
 Opts::validate();
 
-open my $fh, '<', 'config.yml' or die "can't open config file: $!";
+open my $fh, '<', $FindBin::Bin . '/config.yml' or die "can't open config file: $!";
 my $config = LoadFile($fh);
 
 Util::connect();
