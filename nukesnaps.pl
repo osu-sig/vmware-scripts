@@ -26,13 +26,19 @@ my %opts = (
     'period' => {
         type     => "=i",
         variable => "period",
-        help     => "Delete snaps older than this period (in hours)",
+        help     => "Cutoff period in hours",
         required => 0,
     },
-    'noop' => {
+    'nuke' => {
         type     => "",
-        variable => "noop",
-        help     => "Dry run, take no action",
+        variable => "nuke",
+        help     => "Delete snaps older than the cutoff period. Script defaults to dry-run mode if this option is not present",
+        required => 0,
+    },
+    'debug' => {
+        type     => "",
+        variable => "debug",
+        help     => "Print verbose debugging output",
         required => 0,
     },
 );
@@ -40,6 +46,11 @@ my %opts = (
 Opts::add_options(%opts);
 Opts::parse();
 Opts::validate();
+
+my $DEBUG = 0;
+if (defined (Opts::get_option('debug'))) {
+    $DEBUG = 1;
+}
 
 Util::connect();
 do_it();
@@ -79,7 +90,7 @@ sub delete_snapshots {
     my $datacenter = shift;
     my %filter_hash;
 
-    print_out("Deleting snapshots for $datacenter...");
+    print_out("Deleting snapshots for $datacenter...") if $DEBUG;
 
     my $cutoff_period = 24;
     if (defined(Opts::get_option('period'))) {
@@ -98,7 +109,7 @@ sub delete_snapshots {
         ['name', 'guest', 'snapshot']);
 
     $elapsed = time() - $start;
-    printf("Total size of VM properties for datacenter %s: %.2f KB in %.2fs\n", $datacenter, total_size($vm_views)/1024, $elapsed);
+    printf("Total size of VM properties for datacenter %s: %.2f KB in %.2fs\n", $datacenter, total_size($vm_views)/1024, $elapsed) if $DEBUG;
 
     my @snapshots;
 
@@ -127,18 +138,16 @@ sub delete_snapshots {
         my $dtsnap = DateTime::Format::ISO8601->parse_datetime($snap_date);
         $dtsnap->set_time_zone("America/Los_Angeles");
         $snap_date = $dtsnap->strftime("%Y-%m-%d %H:%M:%S %Z");
-        #print_out($snap_vm, $snap_name, $snap_date);
 
         # skip this snapshot if it is newer than the cutoff date
         my $dtnow = DateTime->now(time_zone=>'local');
-        my $dtcutoff = $dtnow->clone->subtract(hours => $cutoff_period);
-        #my $dtcutoff = $dtnow->clone->subtract(minutes => 5);
+        #my $dtcutoff = $dtnow->clone->subtract(hours => $cutoff_period);
+        my $dtcutoff = $dtnow->clone->subtract(minutes => 15);
         next if $dtsnap > $dtcutoff;
 
-        # do nothing if noop flag is set
-        print "\t$snap_vm snapshot $snap_name is older than $cutoff_period hours, deleting...\n";
-        #print "\t$snap_vm snapshot '$snap_name' is older than 5 minutes, deleting...\n";
-        next if defined(Opts::get_option('noop'));
+        # do nothing if nuke flag is not set
+        print_out("$snap_vm snapshot $snap_name is older than $cutoff_period hours, deleting...") if $DEBUG;
+        next if not defined(Opts::get_option('nuke'));
 
         my $snap_view = Vim::get_view(mo_ref => $snap_moref);
         my $remove_snap_task = $snap_view->RemoveSnapshot_Task(removeChildren => 'false', consolidate => 'true');
@@ -146,7 +155,7 @@ sub delete_snapshots {
         while ($running) {
             my $remove_snap_task_view = Vim::get_view(mo_ref => $remove_snap_task);
             my $remove_snap_task_state = $remove_snap_task_view->info->state;
-            print "\t" . $remove_snap_task_view->info->entityName . "->" . $snap_moref->value . ": RemoveSnapshot_Task Status - " . $remove_snap_task_state->{'val'} . "\n";
+            print_out("\t" . $remove_snap_task_view->info->entityName . "->" . $snap_moref->value . ": RemoveSnapshot_Task Status - " . $remove_snap_task_state->{'val'}) if $DEBUG;
             if (($remove_snap_task_state->{'val'} ne "error") && ($remove_snap_task_state->{'val'} ne "success")) {
                 $running = 1; # task state is queued or running
             } else {
@@ -199,25 +208,48 @@ nukesnaps.pl - Delete VM snapshots older than the specified time period
 
 =head1 DESCRIPTION
 
-TODO
+This VI Perl command-line utility locates snapshots older than a given period of
+time and deletes them.
 
 =head1 OPTIONS
 
 =over
 
-=item B<excludeclusters>
+=item B<exclude>
 
-Optional. TODO
+Optional. Datacenter(s) to exclude. Multiple datacenters can be specified in a
+quoted, comma-separated list. See examples for usage.
 
 =item B<period>
 
-Optional. TODO
+Optional. Cutoff time period in hours. Defaults to 24.
 
-=item B<noop>
+=item B<nuke>
 
-Optional. TODO
+Optional flag. Delete snapshots that are older than the cutoff time period. NOTE: if
+this option is not provided, the script will take no action and produce no output
+unless the B<--verbose> flag is given.
+
+=item B<debug>
+
+Optional flag. Print additional debugging output.
 
 =back
 
 =head1 EXAMPLES
 
+Locate all snapshots on this vCenter older than 24 hours and delete them.
+
+  ./nukesnaps.pl --url https://vcenter.url.com --username username
+                 --password password --nuke
+
+Locate all snapshots on this vCenter, excluding snaps in the "Dev" and "Dev 2" datacenters,
+that are older than 24 hours and delete them.
+
+  ./nukesnaps.pl --url https://vcenter.url.com --username username
+                 --password password --exclude "Dev,Dev 2" --nuke
+
+Locate all snapshots on this vCenter older than 72 hours and delete them.
+
+  ./nukesnaps.pl --url https://vcenter.url.com --username username
+                 --password password --period 72 --nuke
