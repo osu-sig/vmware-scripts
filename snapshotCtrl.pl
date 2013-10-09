@@ -7,8 +7,9 @@ use FindBin;
 use lib "$FindBin::Bin/lib";
 
 use Text::CSV_XS;
-use Date::Format;
-use Date::Parse;
+use DateTime;
+use DateTime::Format::Strptime;
+use DateTime::Format::ISO8601;
 use Devel::Size qw(total_size);
 use Time::HiRes qw(time);
 use Data::Dumper;
@@ -99,7 +100,7 @@ if (Opts::option_is_set('out')) {
 my $csv;
 if (Opts::option_is_set('out')) {
     $csv = Text::CSV_XS->new ({ binary => 1, eol => "\015\012" }) or die "Cannot open CSV: " . Text::CSV_XS->error_diag();
-    $csv->print($out_fh, ['vm name','snapshot name','created time']);
+    $csv->print($out_fh, ['vm name','vm hostname','snapshot name','created time']);
 }
 
 Util::connect();
@@ -144,7 +145,7 @@ sub doIt {
             }
 
             if (defined $vm_view->snapshot) {
-                get_snapshots($vm_view->snapshot->currentSnapshot, $_->snapshot->rootSnapshotList, $vm_name, \@snapshots);
+                get_snapshots($vm_view->snapshot->currentSnapshot, $_->snapshot->rootSnapshotList, $vm_name, $vm_hostname, \@snapshots);
             }
         }
 
@@ -164,14 +165,18 @@ sub doIt {
         #print Dumper @snapshots;
 
         foreach my $snap (@snapshots) {
-            my $tmptime = str2time @$snap[2];
-            my @tmpt = gmtime($tmptime);
-            @$snap[2] = strftime("%Y-%m-%d %H:%M:%S", @tmpt);
+            my ($vm_name, $vm_hostname, $snap_name, $snap_date) = @$snap;
+
+            # convert snapshot date from UTC to local timezone
+            my $dtsnap = DateTime::Format::ISO8601->parse_datetime($snap_date);
+            $dtsnap->set_time_zone("America/Los_Angeles");
+            $snap_date = $dtsnap->strftime("%Y-%m-%d %H:%M:%S %Z");
+
             if (defined (Opts::get_option('out'))) {
-                $csv->bind_columns(\(@$snap[0], @$snap[1], @$snap[2]));
+                $csv->bind_columns(\($vm_name, $vm_hostname, $snap_name, $snap_date));
                 $csv->print($out_fh, undef);
             } else {
-                print_out(@$snap[0], @$snap[1], @$snap[2]);
+                print_out($vm_name, $vm_hostname, $snap_name, $snap_date);
             }
         }
     }
@@ -181,13 +186,13 @@ sub doIt {
 # loop through snapshot tree
 #
 sub get_snapshots {
-    my ($ref, $snaptree, $vmname, $snapshots_ref) = @_;
+    my ($ref, $snaptree, $vmname, $vmhostname, $snapshots_ref) = @_;
     my $head = " ";
     foreach my $node (@$snaptree) {
         $head = ($ref->value eq $node->snapshot->value) ? " " : " " if (defined $ref);
         #print_out($vmname, $node->name, $node->createTime);
-        push(@$snapshots_ref,[$vmname, $node->name, $node->createTime]);
-        get_snapshots($ref, $node->childSnapshotList, $vmname, $snapshots_ref);
+        push(@$snapshots_ref,[$vmname, $vmhostname, $node->name, $node->createTime]);
+        get_snapshots($ref, $node->childSnapshotList, $vmname, $vmhostname, $snapshots_ref);
     }
 }
 
