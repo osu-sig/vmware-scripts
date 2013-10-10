@@ -396,6 +396,8 @@ sub getHostStats {
                 print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host cpu speed");
             }
 
+            $host_store{'cpuTotal'} = $host_store{'cpuSpeed'} * $host_store{'cpuCores'};
+
             if (defined $host_view->{'summary.quickStats'}->overallCpuUsage) {
                 $host_store{'cpuUsage'} = $host_view->{'summary.quickStats'}->overallCpuUsage + 0;
             } else {
@@ -411,7 +413,7 @@ sub getHostStats {
             }
 
             if (defined $host_view->{'summary.hardware'}->memorySize) {
-                $host_store{'memSize'} = $host_view->{'summary.hardware'}->memorySize / 1024**2;
+                $host_store{'memSize'} = floor($host_view->{'summary.hardware'}->memorySize / 1024**2);
             } else {
                 $host_store{'memSize'} = 0;
                 print_log($log_fh, $host_store{'uuid'}, $host_store{'name'}, "missing host mem size");
@@ -595,25 +597,25 @@ sub getClusterStats {
             }
 
             if (defined $cluster_view->{'summary'}->totalMemory) {
-                $cluster_store{'memSize'} = $cluster_view->{'summary'}->totalMemory / 1024**2;
+                $cluster_store{'memSize'} = floor($cluster_view->{'summary'}->totalMemory / 1024**2);
             } else {
                 $cluster_store{'memSize'} = 0;
                 print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem size");
             }
 
-            if (defined $cluster_view->{'summary'}->effectiveCpu) {
-                $cluster_store{'cpuAvailable'} = $cluster_view->{'summary'}->effectiveCpu + 0;
-            } else {
-                $cluster_store{'cpuAvailable'} = 0;
-                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster cpu available");
-            }
+            #if (defined $cluster_view->{'summary'}->effectiveCpu) {
+            #    $cluster_store{'cpuAvailable'} = $cluster_view->{'summary'}->effectiveCpu + 0;
+            #} else {
+            #    $cluster_store{'cpuAvailable'} = 0;
+            #    print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster cpu available");
+            #}
 
-            if (defined $cluster_view->{'summary'}->effectiveMemory) {
-                $cluster_store{'memAvailable'} = $cluster_view->{'summary'}->effectiveMemory + 0;
-            } else {
-                $cluster_store{'memAvailable'} = 0;
-                print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem available");
-            }
+            #if (defined $cluster_view->{'summary'}->effectiveMemory) {
+            #    $cluster_store{'memAvailable'} = $cluster_view->{'summary'}->effectiveMemory + 0;
+            #} else {
+            #    $cluster_store{'memAvailable'} = 0;
+            #    print_log($log_fh, $cluster_store{'uuid'}, $cluster_store{'name'}, "missing cluster mem available");
+            #}
 
             $cluster_store{'isHA'} = "N/A";
             $cluster_store{'isDRS'} = "N/A";
@@ -623,8 +625,10 @@ sub getClusterStats {
                 $cluster_store{'isDRS'} = ($cluster_view->{'configurationEx'}->drsConfig->enabled ? "true" : "false");
             }
 
+            $cluster_store{'memUsage'} = 0;
+            $cluster_store{'cpuUsage'} = 0;
             my @cluster_hosts;
-            my $host_views = Vim::get_views(mo_ref_array => $cluster_view->{'host'}, properties => ['name','summary.hardware.uuid','summary.runtime.connectionState']);
+            my $host_views = Vim::get_views(mo_ref_array => $cluster_view->{'host'}, properties => ['name','summary.hardware.uuid','summary.hardware.memorySize','summary.quickStats.overallMemoryUsage','summary.quickStats.overallCpuUsage','summary.runtime.connectionState']);
             if ($host_views) {
                 foreach (@$host_views) {
                     my $host_view = $_;
@@ -633,6 +637,8 @@ sub getClusterStats {
                         $host{'uuid'} = $host_view->{'summary.hardware.uuid'};
                         $host{'name'} = $host_view->{'name'};
                         push(@cluster_hosts, \%host);
+                        $cluster_store{'memUsage'} += ($host_view->{'summary.quickStats.overallMemoryUsage'} + 0);
+                        $cluster_store{'cpuUsage'} += ($host_view->{'summary.quickStats.overallCpuUsage'} + 0);
                     }
                 }
             }
