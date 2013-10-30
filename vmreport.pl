@@ -223,24 +223,23 @@ BEGIN {
 
 =head1 NAME
 
-findBorkedVMs.pl - Find VMs affected by KB article 1007487
+vmreport.pl - Report on all VMs in a given vCenter
 
 =head1 SYNOPSIS
 
- findBorkedVMs.pl [options]
+ vmreport.pl [options]
 
 =head1 DESCRIPTION
 
-This VI Perl command-line utility identifies VMs in which the experimental
-edit hardware feature was used to change the disk size before a VM was deployed
-from a template. See KB article 1007487 for details.
+This VI Perl command-line utility generates a report containing basic statistical
+information for all VMs in the given vCenter.
 
 The resulting report is sent via email by default. In dry run mode, the report
 is printed to stdout.
 
 =head1 CONFIGURATION
 
-Configuration is stored in B<config.yml> under the B<findBorkedVMs> heading.
+Configuration is stored in B<config.yml> under the B<vmreport> heading.
 
 =over
 
@@ -270,12 +269,12 @@ Optional. Dry run, take no action.
 
 =head1 EXAMPLES
 
-Find all affected VMs on this vCenter.
+Report on all VMs on this vCenter.
 
-  ./findBorkedVMs.pl --url https://vcenter.url.com --username username
+  ./vmreport.pl --url https://vcenter.url.com --username username
                      --password password
 
-Find all affected VMs on this vCenter, excluding the "Dev" and "Dev 2" datacenters.
+Report on all VMs on this vCenter, excluding the "Dev" and "Dev 2" datacenters.
 
-  ./findBorkedVMs.pl --url https://vcenter.url.com --username username
+  ./vmreport.pl --url https://vcenter.url.com --username username
                      --password password --exclude "Dev,Dev 2"
